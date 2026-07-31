@@ -2,12 +2,14 @@
 
 React diagnosis workbench for pre-departure and onsite repair analysis.
 
+The current V1 connects only to the real Spring Boot API. It does not contain a
+runtime mock-data path.
+
 ## Stack
 
 - React 19
 - TypeScript
 - Vite
-- React Router
 - Lucide icons
 
 ## Local start
@@ -18,10 +20,24 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Start the backend first, then open:
 
-The default setting uses contract-aligned fixtures. Set `VITE_USE_MOCKS=false`
-when the backend `POST /api/v1/problem-understandings` endpoint is ready.
+```text
+http://localhost:5173/pre-departure
+```
+
+The Vite development server proxies `/api` to `http://localhost:8080`.
+
+The implemented flow covers:
+
+- natural-language problem input;
+- A/B/C information completeness checks;
+- blocking required-field feedback;
+- a strong confirmation for missing recommended fields;
+- a four-stage professional analysis overlay;
+- zero to three ranked cause candidates;
+- categorized traceable evidence;
+- parts, tools and repair steps.
 
 ## Repository ownership
 

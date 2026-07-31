@@ -44,3 +44,105 @@ export interface SystemStatus {
   }
   timestamp: string
 }
+
+export interface DiagnosisCandidate {
+  code: string
+  label: string
+  rank: number
+  supportScore: number
+  supportBand: 'STRONG_SUPPORT' | 'SUPPORTED' | 'NEEDS_CONFIRMATION'
+  explanation: string
+  evidenceIds: string[]
+}
+
+export interface EvidenceItem {
+  id: string
+  title: string
+  sourceReference: string
+  summary: string
+  trustLabel: 'VERIFIED_CASE' | 'OBSERVED_CASE' | 'USER_CONFIRMED'
+  matchedSignals: string[]
+}
+
+export interface EvidenceGroup {
+  type: 'REPAIR_CASE' | 'PART_REFERENCE' | 'ONSITE_OBSERVATION'
+  label: string
+  items: EvidenceItem[]
+}
+
+export interface DiagnosisSession {
+  id: string
+  stage: AnalysisStage
+  status:
+    | 'READY'
+    | 'PARTIALLY_SUPPORTED'
+    | 'INSUFFICIENT_EVIDENCE'
+    | 'ONSITE_QUESTIONING'
+    | 'CONVERGED'
+  progress: {
+    phase: string
+    percent: number
+  }
+  problemUnderstanding: ProblemUnderstanding
+  candidates: DiagnosisCandidate[]
+  evidenceGroups: EvidenceGroup[]
+  recommendations: {
+    parts: Array<{
+      partNumber: string
+      name: string
+      preparationLevel: 'RECOMMENDED_PREPARE' | 'CONFIRM_ONSITE'
+      evidenceIds: string[]
+    }>
+    tools: Array<{
+      code: string
+      name: string
+    }>
+    steps: Array<{
+      sequence: number
+      instruction: string
+      sourceLabel: string
+      evidenceIds: string[]
+    }>
+  }
+  nextQuestion: OnsiteQuestion | null
+  updatedAt: string
+}
+
+export interface OnsiteQuestion {
+  id: string
+  type: 'SINGLE_CHOICE' | 'MEASUREMENT'
+  prompt: string
+  signalCode: string
+  candidateCode: string
+  round: number
+  unit: string | null
+  options: Array<{
+    code: string
+    label: string
+  }>
+}
+
+export interface OnsiteQuestionResponse {
+  responseType:
+    | 'OPTION'
+    | 'MEASUREMENT'
+    | 'OTHER_TEXT'
+    | 'UNAVAILABLE'
+    | 'SKIPPED'
+  selectedOptionCode?: string
+  rawText?: string
+  valueNumber?: number
+  unit?: string
+}
+
+export interface SavedReport {
+  id: string
+  sessionId: string
+  reportName: string
+  note: string | null
+  stage: AnalysisStage
+  diagnosisStatus: DiagnosisSession['status']
+  topCandidate: string | null
+  savedAt: string
+  snapshot: DiagnosisSession
+}
