@@ -21,6 +21,9 @@ import {
   Save,
   ShieldCheck,
   SkipForward,
+  Monitor,
+  Moon,
+  Sun,
   TriangleAlert,
   Wrench,
   X,
@@ -38,9 +41,11 @@ import { api } from './api/client'
 import { useLanguage } from './i18n'
 import type {
   DiagnosisSession,
+  EvidenceGroup,
   EvidenceItem,
   OnsiteQuestionResponse,
   ProblemUnderstanding,
+  RepairStep,
   SavedReport,
   SystemStatus,
 } from './api/types'
@@ -132,7 +137,29 @@ function AppLink({
 function App() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [path, setPath] = useState(() => normalizePath(window.location.pathname))
+  const [themePreference, setThemePreference] = useState<'system' | 'light' | 'dark'>(() => {
+    const saved = window.localStorage.getItem('repair-assistant-theme')
+    return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system'
+  })
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  )
   const { language, setLanguage, text } = useLanguage()
+
+  const activeTheme = themePreference === 'system' ? systemTheme : themePreference
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const updateTheme = () => setSystemTheme(media.matches ? 'dark' : 'light')
+    updateTheme()
+    media.addEventListener('change', updateTheme)
+    return () => media.removeEventListener('change', updateTheme)
+  }, [])
+
+  const setTheme = (next: 'system' | 'light' | 'dark') => {
+    window.localStorage.setItem('repair-assistant-theme', next)
+    setThemePreference(next)
+  }
 
   useEffect(() => {
     api.getSystemStatus().then(setSystemStatus).catch(() => setSystemStatus(null))
@@ -150,7 +177,7 @@ function App() {
   }, [])
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-theme={activeTheme}>
       <header className="topbar">
         <AppLink className="brand" to="/pre-departure">
           <span className="brand-mark">AI</span>
@@ -202,6 +229,39 @@ function App() {
               type="button"
             >
               日
+            </button>
+          </div>
+          <div
+            aria-label={text('界面主题', '画面テーマ')}
+            className="theme-switch"
+            role="group"
+          >
+            <button
+              aria-label={text('浅色模式', 'ライトモード')}
+              aria-pressed={themePreference === 'light'}
+              className={themePreference === 'light' ? 'active' : undefined}
+              onClick={() => setTheme('light')}
+              type="button"
+            >
+              <Sun size={15} />
+            </button>
+            <button
+              aria-label={text('深色模式', 'ダークモード')}
+              aria-pressed={themePreference === 'dark'}
+              className={themePreference === 'dark' ? 'active' : undefined}
+              onClick={() => setTheme('dark')}
+              type="button"
+            >
+              <Moon size={15} />
+            </button>
+            <button
+              aria-label={text('跟随系统', 'システム設定に合わせる')}
+              aria-pressed={themePreference === 'system'}
+              className={themePreference === 'system' ? 'active' : undefined}
+              onClick={() => setTheme('system')}
+              type="button"
+            >
+              <Monitor size={15} />
             </button>
           </div>
           <span
@@ -739,6 +799,7 @@ function DiagnosisResults({
   reportSaved?: boolean
 }) {
   const { language, text } = useLanguage()
+  const [stepForSources, setStepForSources] = useState<RepairStep | null>(null)
   const candidateCount = diagnosis.candidates.length
   const evidenceCount = diagnosis.evidenceGroups.reduce(
     (sum, group) => sum + group.items.length,
@@ -971,6 +1032,13 @@ function DiagnosisResults({
               <ol className="repair-steps">
                 {diagnosis.recommendations.steps.map((step) => (
                   <li key={`${step.sequence}-${step.instruction}`}>
+                    <button
+                      aria-label={`${text('查看步骤出处', '手順の出典を表示')}：${step.instruction}`}
+                      className="repair-step-button"
+                      disabled={step.evidenceIds.length === 0}
+                      onClick={() => setStepForSources(step)}
+                      type="button"
+                    >
                     <span>{String(step.sequence).padStart(2, '0')}</span>
                     <div>
                       <strong>{step.instruction}</strong>
@@ -981,6 +1049,8 @@ function DiagnosisResults({
                           : text('来自已解决维修案例', '解決済み修理事例に基づく')}
                       </small>
                     </div>
+                    <ChevronRight aria-hidden="true" size={17} />
+                    </button>
                   </li>
                 ))}
               </ol>
@@ -995,7 +1065,73 @@ function DiagnosisResults({
           </div>
         </div>
       </section>
+      {stepForSources && (
+        <StepSourcesDialog
+          evidenceGroups={diagnosis.evidenceGroups}
+          onClose={() => setStepForSources(null)}
+          onOpenEvidence={(item) => {
+            setStepForSources(null)
+            onOpenEvidence(item)
+          }}
+          step={stepForSources}
+        />
+      )}
     </section>
+  )
+}
+
+function StepSourcesDialog({
+  step,
+  evidenceGroups,
+  onOpenEvidence,
+  onClose,
+}: {
+  step: RepairStep
+  evidenceGroups: EvidenceGroup[]
+  onOpenEvidence: (item: EvidenceItem) => void
+  onClose: () => void
+}) {
+  const { text } = useLanguage()
+  const sources = evidenceGroups.flatMap((group) =>
+    group.items
+      .filter((item) => step.evidenceIds.includes(item.id))
+      .map((item) => ({ item, sourceLabel: group.label })),
+  )
+
+  return (
+    <div className="dialog-backdrop step-sources-backdrop" role="presentation">
+      <section
+        aria-labelledby="step-sources-title"
+        aria-modal="true"
+        className="step-sources-dialog"
+        role="dialog"
+      >
+        <header>
+          <div>
+            <span className="eyebrow">STEP SOURCES</span>
+            <h2 id="step-sources-title">{text('维修步骤出处', '作業手順の出典')}</h2>
+            <p>{step.instruction}</p>
+          </div>
+          <button aria-label={text('关闭出处列表', '出典一覧を閉じる')} className="icon-button" onClick={onClose} type="button">
+            <X size={18} />
+          </button>
+        </header>
+        <div className="step-sources-list">
+          {sources.length ? (
+            sources.map(({ item, sourceLabel }) => (
+              <button key={item.id} onClick={() => onOpenEvidence(item)} type="button">
+                <span>{sourceLabel}</span>
+                <strong>{item.title}</strong>
+                <small>{item.trustLabel === 'AUTHORITATIVE' ? text('官方手册', '公式マニュアル') : text('已验证证据', '検証済みの根拠')}</small>
+                <ChevronRight aria-hidden="true" size={17} />
+              </button>
+            ))
+          ) : (
+            <p className="muted-copy">{text('该步骤暂无可追溯的原文出处。', 'この手順には追跡可能な原文出典がありません。')}</p>
+          )}
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -1555,11 +1691,13 @@ function OnsiteQuestionPanel({
 
         <div className="question-secondary-actions">
           <button
+            aria-expanded={showOther}
+            className="other-observation-button"
             disabled={disabled}
             onClick={() => setShowOther((current) => !current)}
             type="button"
           >
-            <MessageSquareText size={14} />
+            <MessageSquareText size={17} />
             {text('其他观察', 'その他の観察')}
           </button>
           <button

@@ -1,18 +1,18 @@
 :root {
-  --surface-0: #080b12;
-  --surface-1: #0e131d;
-  --surface-2: #141b29;
-  --surface-3: #192233;
-  --line: #283348;
-  --line-strong: #3a485f;
-  --text-1: #f4f6f8;
-  --text-2: #aab5c7;
-  --text-3: #748198;
-  --amber: #d7a14b;
-  --amber-soft: #2d2419;
-  --teal: #30c3ad;
-  --red: #f26a74;
-  --violet: #8e82f5;
+  --surface-0: #0d1320;
+  --surface-1: #151d2d;
+  --surface-2: #1c2638;
+  --surface-3: #263247;
+  --line: #31405a;
+  --line-strong: #4a5d7b;
+  --text-1: #f4f7fb;
+  --text-2: #c0cada;
+  --text-3: #91a0b6;
+  --amber: #f2b65b;
+  --amber-soft: #3b2d1a;
+  --teal: #58d1bd;
+  --red: #ff7d88;
+  --violet: #aa9cff;
   color: var(--text-1);
   background: var(--surface-0);
   font-family:
@@ -50,6 +50,49 @@ button:disabled {
 
 .app-shell {
   min-height: 100vh;
+  color: var(--text-1);
+  background:
+    radial-gradient(circle at 12% -10%, rgba(88, 209, 189, 0.13), transparent 31rem),
+    radial-gradient(circle at 94% 8%, rgba(170, 156, 255, 0.1), transparent 26rem),
+    var(--surface-0);
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.app-shell[data-theme='light'] {
+  --surface-0: #f5f8fc;
+  --surface-1: #ffffff;
+  --surface-2: #f0f4f9;
+  --surface-3: #e7eef7;
+  --line: #d7e0ec;
+  --line-strong: #bac9da;
+  --text-1: #17233a;
+  --text-2: #53647d;
+  --text-3: #71809a;
+  --amber: #d68925;
+  --amber-soft: #fff3df;
+  --teal: #168f84;
+  --red: #dc5265;
+  --violet: #7564d8;
+  color-scheme: light;
+}
+
+.app-shell[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+.app-shell[data-theme='light'] .analysis-console,
+.app-shell[data-theme='light'] .confirm-dialog,
+.app-shell[data-theme='light'] .evidence-dialog {
+  background: var(--surface-1);
+}
+
+.app-shell[data-theme='light'] .pdf-evidence-viewer,
+.app-shell[data-theme='light'] .pdf-page-scroll {
+  background: var(--surface-2);
+}
+
+.app-shell[data-theme='light'] .question-index {
+  background: var(--surface-2);
 }
 
 .topbar {
@@ -62,7 +105,7 @@ button:disabled {
   min-height: 68px;
   padding: 0 24px;
   border-bottom: 1px solid var(--line);
-  background: rgba(8, 11, 18, 0.96);
+  background: color-mix(in srgb, var(--surface-0) 91%, transparent);
   backdrop-filter: blur(14px);
 }
 
@@ -164,6 +207,36 @@ button:disabled {
 .language-switch button.active {
   color: #12151b;
   background: var(--amber);
+}
+
+.theme-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+.theme-switch button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-3);
+  background: transparent;
+}
+
+.theme-switch button:hover {
+  color: var(--text-1);
+  background: var(--surface-2);
+}
+
+.theme-switch button.active {
+  color: #fff;
+  background: var(--teal);
+  box-shadow: 0 2px 7px rgba(22, 86, 82, 0.25);
 }
 
 .icon-button {
@@ -286,7 +359,7 @@ h2 {
 .empty-analysis,
 .placeholder-grid {
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 14px;
   background: var(--surface-1);
 }
 
@@ -306,7 +379,7 @@ h2 {
 .demo-scenarios > button {
   min-height: 72px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 10px;
   background: var(--surface-2);
 }
 
@@ -377,7 +450,7 @@ textarea {
   padding: 16px;
   resize: vertical;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 10px;
   outline: none;
   color: var(--text-1);
   background: var(--surface-2);
@@ -411,7 +484,8 @@ textarea:focus {
   gap: 8px;
   padding: 0 18px;
   border: 1px solid var(--amber);
-  border-radius: 4px;
+  border-radius: 9px;
+  box-shadow: 0 5px 12px rgba(215, 137, 37, 0.2);
   color: #12151b;
   background: var(--amber);
   font-size: 13px;
@@ -481,9 +555,9 @@ textarea:focus {
 
 .understood-field {
   display: flex;
-  min-height: 110px;
+  min-height: 124px;
   flex-direction: column;
-  padding: 14px;
+  padding: 17px;
   background: var(--surface-2);
 }
 
@@ -492,7 +566,8 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .field-label small {
@@ -503,7 +578,7 @@ textarea:focus {
   border: 1px solid currentColor;
   border-radius: 50%;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .level-a .field-label small {
@@ -520,16 +595,16 @@ textarea:focus {
 
 .understood-field strong {
   margin-top: 10px;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 17px;
+  line-height: 1.45;
 }
 
 .field-meta {
   margin-top: auto;
   padding-top: 10px;
   color: var(--text-3);
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .analysis-readiness {
@@ -592,11 +667,11 @@ textarea:focus {
 }
 
 .understood-field.is-missing {
-  background: #171b28;
+  background: var(--surface-3);
 }
 
 .understood-field.is-missing strong {
-  color: #bdc5d2;
+  color: var(--text-2);
 }
 
 .level-c.is-missing {
@@ -705,7 +780,7 @@ textarea:focus {
   padding: 12px;
   border: 1px solid rgba(215, 161, 75, 0.68);
   border-radius: 5px;
-  background: #0b1019;
+  background: var(--surface-2);
 }
 
 .candidate-panel,
@@ -760,7 +835,7 @@ textarea:focus {
 
 .candidate-card.primary {
   border-color: rgba(215, 161, 75, 0.8);
-  background: #201f28;
+  background: var(--amber-soft);
 }
 
 .candidate-rank {
@@ -805,7 +880,7 @@ textarea:focus {
   height: 3px;
   margin-top: 13px;
   overflow: hidden;
-  background: #212a39;
+  background: var(--surface-3);
 }
 
 .support-track span {
@@ -918,7 +993,7 @@ textarea:focus {
 
 .evidence-item:hover {
   border-color: rgba(48, 195, 173, 0.6);
-  background: #172231;
+  background: var(--surface-3);
 }
 
 .trust-label {
@@ -1000,7 +1075,7 @@ textarea:focus {
   align-items: center;
   gap: 8px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .preparation-block h4 svg,
@@ -1017,8 +1092,8 @@ textarea:focus {
 
 .compact-items > div {
   min-width: 0;
-  min-height: 92px;
-  padding: 12px;
+  min-height: 104px;
+  padding: 14px;
   border: 1px solid var(--line);
   background: var(--surface-1);
 }
@@ -1031,7 +1106,7 @@ textarea:focus {
 
 .compact-items span {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1041,13 +1116,14 @@ textarea:focus {
   margin-top: 7px;
   color: var(--amber);
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .compact-items small {
   margin-top: 7px;
   color: var(--text-3);
-  font-size: 9px;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .tool-tags {
@@ -1062,7 +1138,7 @@ textarea:focus {
   border: 1px solid var(--line);
   color: var(--text-2);
   background: var(--surface-1);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .steps-column {
@@ -1079,19 +1155,39 @@ textarea:focus {
 }
 
 .repair-steps li {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  min-height: 64px;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
   background: var(--surface-1);
 }
 
-.repair-steps li > span {
+.repair-step-button {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  color: inherit;
+  background: var(--surface-1);
+  cursor: pointer;
+  text-align: left;
+}
+
+.repair-step-button:hover:not(:disabled),
+.repair-step-button:focus-visible {
+  background: var(--surface-2);
+  outline: 1px solid var(--amber);
+  outline-offset: -1px;
+}
+
+.repair-step-button:disabled {
+  cursor: default;
+}
+
+.repair-step-button > span {
   color: var(--amber);
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .repair-steps strong,
@@ -1099,16 +1195,101 @@ textarea:focus {
   display: block;
 }
 
+.repair-step-button > svg {
+  color: var(--text-3);
+}
+
+.step-sources-dialog {
+  width: min(580px, 92vw);
+  overflow: hidden;
+  border: 1px solid rgba(215, 161, 75, 0.7);
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.6);
+}
+
+.step-sources-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.step-sources-dialog h2 {
+  margin-top: 7px;
+  font-size: 21px;
+}
+
+.step-sources-dialog header p {
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.step-sources-list {
+  display: grid;
+  gap: 1px;
+  max-height: min(440px, calc(100vh - 260px));
+  overflow-y: auto;
+  background: var(--line);
+}
+
+.step-sources-list > button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 14px;
+  padding: 16px 20px;
+  border: 0;
+  color: inherit;
+  background: var(--surface-1);
+  cursor: pointer;
+  text-align: left;
+}
+
+.step-sources-list > button:hover,
+.step-sources-list > button:focus-visible {
+  background: var(--surface-2);
+  outline: 1px solid var(--amber);
+  outline-offset: -1px;
+}
+
+.step-sources-list span,
+.step-sources-list small {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.step-sources-list strong {
+  overflow-wrap: anywhere;
+}
+
+.step-sources-list > button > svg {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  color: var(--text-3);
+}
+
+.step-sources-list .muted-copy {
+  margin: 0;
+  padding: 24px;
+  background: var(--surface-1);
+}
+
 .repair-steps strong {
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
 .repair-steps small {
   margin-top: 5px;
   color: var(--text-3);
-  font-size: 9px;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .muted-copy {
@@ -1140,7 +1321,7 @@ textarea:focus {
   border: 1px solid rgba(48, 195, 173, 0.58);
   border-radius: 12px;
   background:
-    linear-gradient(rgba(14, 19, 29, 0.94), rgba(14, 19, 29, 0.94)),
+    linear-gradient(color-mix(in srgb, var(--surface-1) 94%, transparent), color-mix(in srgb, var(--surface-1) 94%, transparent)),
     repeating-linear-gradient(
       0deg,
       transparent,
@@ -1212,7 +1393,7 @@ textarea:focus {
   display: grid;
   place-items: center;
   color: var(--text-1);
-  background: #192534;
+  background: var(--surface-3);
   box-shadow: 0 0 28px rgba(48, 195, 173, 0.18);
 }
 
@@ -1276,7 +1457,7 @@ textarea:focus {
 
 .analysis-phases .running {
   color: var(--text-1);
-  background: #192331;
+  background: var(--surface-3);
 }
 
 .analysis-phases .running > span {
@@ -1446,13 +1627,7 @@ textarea:focus {
 .evidence-document {
   overflow-y: auto;
   padding: 28px 32px;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 31px,
-      rgba(58, 72, 95, 0.24) 32px
-    );
+  background: var(--surface-1);
 }
 
 .evidence-reader-body {
@@ -1476,7 +1651,7 @@ textarea:focus {
 
 .evidence-document p {
   margin: 10px 0 30px;
-  color: #d7deea;
+  color: var(--text-2);
   overflow-wrap: anywhere;
   font-size: 15px;
   line-height: 2.05;
@@ -1486,7 +1661,7 @@ textarea:focus {
   margin: 10px 0 8px;
   padding: 16px 17px;
   border-left: 2px solid var(--amber);
-  color: #d7deea;
+  color: var(--text-2);
   background: rgba(215, 161, 75, 0.07);
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 11px;
@@ -1499,7 +1674,7 @@ textarea:focus {
   min-width: 0;
   min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
-  background: #080c13;
+  background: var(--surface-2);
 }
 
 .pdf-toolbar {
@@ -1510,7 +1685,7 @@ textarea:focus {
   gap: 14px;
   padding: 8px 12px 8px 16px;
   border-bottom: 1px solid var(--line);
-  background: rgba(18, 26, 40, 0.96);
+  background: var(--surface-1);
 }
 
 .pdf-toolbar > div:first-child {
@@ -1589,9 +1764,7 @@ textarea:focus {
   min-height: 0;
   overflow: auto;
   padding: 14px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
-    #070a10;
+  background: var(--surface-2);
 }
 
 .pdf-page-scroll .react-pdf__Document {
@@ -1810,7 +1983,7 @@ textarea:focus {
   justify-content: center;
   border-right: 1px solid var(--line);
   color: var(--amber);
-  background: #131720;
+  background: var(--surface-2);
 }
 
 .question-index span {
@@ -1867,7 +2040,7 @@ textarea:focus {
 
 .question-options button:hover {
   border-color: var(--amber);
-  background: #1e2027;
+  background: var(--surface-3);
 }
 
 .question-options button > span {
@@ -1939,6 +2112,33 @@ textarea:focus {
 .question-secondary-actions button:hover {
   color: var(--text-1);
   background: var(--surface-2);
+}
+
+.question-secondary-actions .other-observation-button {
+  min-height: 46px;
+  padding: 0 14px;
+  border-color: color-mix(in srgb, var(--teal) 68%, var(--line));
+  border-left: 3px solid var(--teal);
+  border-radius: 8px;
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 11%, var(--surface-1));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--teal) 16%, transparent);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.question-secondary-actions .other-observation-button:hover,
+.question-secondary-actions .other-observation-button[aria-expanded='true'] {
+  color: var(--text-1);
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.other-entry {
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--teal) 48%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--teal) 6%, var(--surface-1));
 }
 
 .question-purpose {
@@ -2075,7 +2275,8 @@ textarea:focus {
 
 .report-list button strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2083,7 +2284,7 @@ textarea:focus {
 .report-list button small {
   margin-top: 7px;
   color: var(--text-3);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .report-detail {
