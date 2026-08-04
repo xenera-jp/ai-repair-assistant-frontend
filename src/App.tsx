@@ -46,7 +46,10 @@ import type {
 } from './api/types'
 import './App.css'
 
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker
+// Keep the PDF.js version in the worker URL. This invalidates a browser-cached
+// worker response when the deployed PDF.js runtime changes or its MIME setup is
+// corrected, while retaining Vite's content-hashed worker asset.
+pdfjs.GlobalWorkerOptions.workerSrc = `${pdfWorker}?v=${pdfjs.version}`
 
 const demoScenarios = [
   {
@@ -1209,6 +1212,12 @@ function PdfEvidenceViewer({
           onLoadSuccess={({ numPages }) => {
             setPageCount(numPages)
             setPageNumber(Math.min(source.pdfPage, numPages))
+          }}
+          onLoadError={(error) => {
+            console.error('Failed to load the service manual PDF.', error)
+          }}
+          onSourceError={(error) => {
+            console.error('Failed to resolve the service manual PDF source.', error)
           }}
         >
           <div

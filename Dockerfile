@@ -16,17 +16,15 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# The demo deployment exposes the frontend directly on port 4173. `serve` is a
-# small static server with SPA fallback, so React routes work after page refresh.
-FROM node:22-alpine AS runtime
+# Nginx serves the SPA and proxies same-origin /api requests to Spring Boot.
+# Keeping both behind port 80 avoids browser CORS issues and makes PDF range
+# requests behave consistently in react-pdf.
+FROM nginx:1.27-alpine AS runtime
 
-WORKDIR /app
-RUN npm install --global serve@14.2.5
-COPY --from=build /app/dist ./dist
+COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
 
-EXPOSE 4173
+EXPOSE 80
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=5 \
-  CMD wget -q -O /dev/null http://127.0.0.1:4173/pre-departure || exit 1
-
-CMD ["serve", "--single", "dist", "--listen", "4173"]
+  CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1

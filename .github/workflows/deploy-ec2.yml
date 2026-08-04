@@ -1,0 +1,27 @@
+name: Deploy frontend to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-repair-frontend-ec2
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy frontend
+    runs-on: [self-hosted, Linux, X64, frontend]
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build, replace, and verify frontend
+        run: ./deploy/ec2/deploy-frontend.sh
