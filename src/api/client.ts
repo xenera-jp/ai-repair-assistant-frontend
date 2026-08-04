@@ -31,6 +31,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  manualDocumentUrl: (manualKnowledgeId: number) =>
+    `${apiBaseUrl}/api/v1/knowledge/manuals/${manualKnowledgeId}/document`,
+
   getSystemStatus: () =>
     request<SystemStatus>('/api/v1/system/status', { method: 'GET' }),
 

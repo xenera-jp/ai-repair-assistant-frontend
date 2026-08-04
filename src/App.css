@@ -138,6 +138,34 @@ button:disabled {
   gap: 10px;
 }
 
+.language-switch {
+  display: grid;
+  grid-template-columns: repeat(2, 32px);
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-1);
+}
+
+.language-switch button {
+  border: 0;
+  border-radius: 3px;
+  color: var(--text-3);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.language-switch button:hover {
+  color: var(--text-1);
+}
+
+.language-switch button.active {
+  color: #12151b;
+  background: var(--amber);
+}
+
 .icon-button {
   display: grid;
   width: 34px;
@@ -265,6 +293,63 @@ h2 {
 .input-band {
   padding: 22px;
   border-top: 2px solid var(--amber);
+}
+
+.demo-scenarios {
+  display: grid;
+  grid-template-columns: 150px repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.demo-scenario-label,
+.demo-scenarios > button {
+  min-height: 72px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.demo-scenario-label {
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 14px;
+  border-left: 2px solid var(--amber);
+}
+
+.demo-scenario-label strong,
+.demo-scenarios > button strong {
+  color: var(--text-1);
+  font-size: 12px;
+}
+
+.demo-scenario-label span,
+.demo-scenarios > button span {
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.demo-scenarios > button {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.demo-scenarios > button:hover {
+  border-color: rgba(215, 161, 75, 0.58);
+}
+
+.demo-scenarios > button.active {
+  border-color: var(--amber);
+  background: var(--amber-soft);
+  box-shadow: inset 0 0 0 1px rgba(215, 161, 75, 0.12);
 }
 
 .section-title {
@@ -1313,6 +1398,12 @@ textarea:focus {
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.6);
 }
 
+.evidence-dialog-with-pdf {
+  width: min(1220px, calc(100vw - 44px));
+  height: min(860px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+}
+
 .evidence-dialog header {
   display: flex;
   min-height: 100px;
@@ -1364,6 +1455,20 @@ textarea:focus {
     );
 }
 
+.evidence-reader-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.evidence-dialog-with-pdf .evidence-reader-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.5fr);
+}
+
+.evidence-dialog-with-pdf .evidence-document {
+  border-right: 1px solid var(--line);
+}
+
 .evidence-document h3 {
   color: var(--amber);
   font-size: 11px;
@@ -1375,6 +1480,175 @@ textarea:focus {
   overflow-wrap: anywhere;
   font-size: 15px;
   line-height: 2.05;
+}
+
+.evidence-document blockquote {
+  margin: 10px 0 8px;
+  padding: 16px 17px;
+  border-left: 2px solid var(--amber);
+  color: #d7deea;
+  background: rgba(215, 161, 75, 0.07);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.75;
+  white-space: pre-line;
+}
+
+.pdf-evidence-viewer {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: #080c13;
+}
+
+.pdf-toolbar {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(18, 26, 40, 0.96);
+}
+
+.pdf-toolbar > div:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.pdf-toolbar > div:first-child span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.pdf-toolbar-actions button,
+.pdf-toolbar-actions a {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.pdf-toolbar-actions button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.pdf-toolbar-actions > span {
+  min-width: 92px;
+  color: var(--text-3);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 9px;
+  text-align: center;
+}
+
+.pdf-location-strip {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(48, 195, 173, 0.2);
+  color: var(--text-3);
+  background: rgba(48, 195, 173, 0.06);
+  font-size: 9px;
+}
+
+.pdf-location-strip span {
+  color: var(--teal);
+  font-weight: 700;
+}
+
+.pdf-location-strip strong {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 9px;
+}
+
+.pdf-page-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
+    #070a10;
+}
+
+.pdf-page-scroll .react-pdf__Document {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  justify-content: center;
+}
+
+.pdf-page-shell {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.pdf-page-scroll .react-pdf__Page {
+  overflow: hidden;
+  border-radius: 2px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+}
+
+.pdf-source-region {
+  position: absolute;
+  z-index: 5;
+  min-width: 24px;
+  min-height: 12px;
+  pointer-events: none;
+  border: 2px solid #e7a847;
+  border-radius: 4px;
+  background: rgba(255, 190, 72, 0.28);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.78),
+    0 0 20px rgba(231, 168, 71, 0.55);
+}
+
+.pdf-source-region span {
+  position: absolute;
+  right: -2px;
+  bottom: calc(100% + 6px);
+  padding: 4px 7px;
+  border-radius: 3px;
+  color: #111722;
+  background: #e7a847;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.pdf-state {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--text-3);
+  font-size: 11px;
 }
 
 .evidence-dialog footer {
@@ -1953,6 +2227,15 @@ textarea:focus {
     border-top: 1px solid var(--line);
     border-left: 0;
   }
+
+  .demo-scenarios {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .demo-scenario-label {
+    grid-column: 1 / -1;
+    min-height: 54px;
+  }
 }
 
 @media (max-width: 620px) {
@@ -1976,6 +2259,14 @@ textarea:focus {
 
   .workflow-step {
     min-width: 130px;
+  }
+
+  .demo-scenarios {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-scenario-label {
+    grid-column: auto;
   }
 
   .field-grid {
@@ -2077,6 +2368,31 @@ textarea:focus {
 
   .evidence-dialog {
     width: 100%;
+  }
+
+  .evidence-dialog-with-pdf {
+    height: calc(100vh - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .evidence-dialog-with-pdf .evidence-reader-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .evidence-dialog-with-pdf .evidence-document {
+    max-height: 280px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .pdf-evidence-viewer {
+    min-height: 520px;
+  }
+
+  .pdf-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .evidence-dialog header,

@@ -23,6 +23,7 @@ export interface UnderstoodField {
 export interface ProblemUnderstanding {
   id: string
   originalText: string
+  language: 'zh-CN' | 'ja-JP'
   summary: string
   primaryProblemType: {
     code: string
@@ -60,12 +61,41 @@ export interface EvidenceItem {
   title: string
   sourceReference: string
   summary: string
-  trustLabel: 'VERIFIED_CASE' | 'OBSERVED_CASE' | 'USER_CONFIRMED'
+  trustLabel:
+    | 'AUTHORITATIVE'
+    | 'VERIFIED_CASE'
+    | 'OBSERVED_CASE'
+    | 'USER_CONFIRMED'
   matchedSignals: string[]
+  sourceDocument: SourceDocumentLocation | null
+}
+
+export interface SourceDocumentLocation {
+  manualKnowledgeId: number
+  fileName: string
+  pdfPage: number
+  printedPage: string | null
+  sectionPath: string | null
+  sourceQuote: string
+  sourceAnchor: string
+  sourceRegion: PdfSourceRegion | null
+}
+
+export interface PdfSourceRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+  pageWidth: number
+  pageHeight: number
 }
 
 export interface EvidenceGroup {
-  type: 'REPAIR_CASE' | 'PART_REFERENCE' | 'ONSITE_OBSERVATION'
+  type:
+    | 'REPAIR_CASE'
+    | 'SERVICE_MANUAL'
+    | 'PART_REFERENCE'
+    | 'ONSITE_OBSERVATION'
   label: string
   items: EvidenceItem[]
 }
