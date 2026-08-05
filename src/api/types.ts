@@ -116,6 +116,7 @@ export interface DiagnosisSession {
     | 'INSUFFICIENT_EVIDENCE'
     | 'ONSITE_QUESTIONING'
     | 'CONVERGED'
+    | 'REJECTED'
   progress: {
     phase: string
     percent: number
@@ -138,6 +139,22 @@ export interface DiagnosisSession {
   }
   nextQuestion: OnsiteQuestion | null
   updatedAt: string
+}
+
+export type RejectionScope = 'WHOLE' | 'CANDIDATES'
+
+export type RejectionReasonCode =
+  | 'SYMPTOM_MISMATCH'
+  | 'MEASUREMENT_CONFLICT'
+  | 'CAUSE_EXCLUDED'
+  | 'OTHER'
+
+export interface RejectionRequest {
+  scope: RejectionScope
+  rejectedCandidateCodes: string[]
+  reasonCode?: RejectionReasonCode
+  reasonText?: string
+  onsiteObservation: string
 }
 
 export interface OnsiteQuestion {

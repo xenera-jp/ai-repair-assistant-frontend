@@ -45,6 +45,7 @@ import type {
   EvidenceItem,
   OnsiteQuestionResponse,
   ProblemUnderstanding,
+  RejectionRequest,
   RepairStep,
   SavedReport,
   SystemStatus,
@@ -647,17 +648,17 @@ function UnderstandingPanel({
           {diagnosisReady ? <CheckCircle2 size={17} /> : <ShieldCheck size={17} />}
           {diagnosisReady
             ? text('诊断已完成', '診断完了')
-            : text('开始 AI 诊断', 'AI診断を開始')}
+            : text('进入AI诊断', 'AI診断へ進む')}
         </button>
       </aside>
     </section>
   )
 }
 
-function AnalysisOverlay({ mode = 'INITIAL' }: { mode?: 'INITIAL' | 'ONSITE' }) {
+function AnalysisOverlay({ mode = 'INITIAL' }: { mode?: 'INITIAL' | 'ONSITE' | 'ONSITE_REANALYSIS' }) {
   const { language, text } = useLanguage()
   const phases =
-    mode === 'ONSITE'
+    mode === 'ONSITE' || mode === 'ONSITE_REANALYSIS'
       ? language === 'ja-JP'
         ? [
             ['現場事実を記録', '確認された情報を現場セッションに記録しています'],
@@ -706,8 +707,11 @@ function AnalysisOverlay({ mode = 'INITIAL' }: { mode?: 'INITIAL' | 'ONSITE' }) 
         </div>
         <span className="eyebrow">REPAIR INTELLIGENCE ENGINE</span>
         <h2>
-          {mode === 'ONSITE'
-            ? text('正在收敛现场结论', '現場結論を絞り込み中')
+          {mode === 'ONSITE' || mode === 'ONSITE_REANALYSIS'
+            ? text(
+                mode === 'ONSITE_REANALYSIS' ? '正在根据现场发现重新分析' : '正在收敛现场结论',
+                mode === 'ONSITE_REANALYSIS' ? '現場での発見に基づき再分析中' : '現場結論を絞り込み中',
+              )
             : text('正在构建可追溯诊断', '追跡可能な診断を構築中')}
         </h2>
         <p>{phases[phaseIndex][1]}</p>
@@ -1388,7 +1392,17 @@ function OnsitePage() {
     useState<EvidenceItem | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isReanalyzing, setIsReanalyzing] = useState(false)
+  const [analysisOverlayMode, setAnalysisOverlayMode] = useState<
+    'ONSITE' | 'ONSITE_REANALYSIS'
+  >('ONSITE')
   const [isSavingReport, setIsSavingReport] = useState(false)
+  const [showRejection, setShowRejection] = useState(false)
+  const [isRejecting, setIsRejecting] = useState(false)
+  const [reanalysisPreparation, setReanalysisPreparation] = useState<{
+    sourceSessionId: string
+    request: RejectionRequest
+    understanding: ProblemUnderstanding
+  } | null>(null)
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -1433,6 +1447,7 @@ function OnsitePage() {
 
   const answerQuestion = async (response: OnsiteQuestionResponse) => {
     if (!diagnosis?.nextQuestion) return
+    setAnalysisOverlayMode('ONSITE')
     setIsReanalyzing(true)
     setErrorMessage(null)
     try {
@@ -1471,6 +1486,53 @@ function OnsitePage() {
       )
     } finally {
       setIsSavingReport(false)
+    }
+  }
+
+  const rejectDiagnosis = async (request: RejectionRequest) => {
+    if (!diagnosis) return
+    setIsRejecting(true)
+    setErrorMessage(null)
+    try {
+      const understanding = await api.rejectDiagnosis(diagnosis.id, request)
+      setReanalysisPreparation({
+        sourceSessionId: diagnosis.id,
+        request,
+        understanding,
+      })
+      setSavedReportId(null)
+      setShowRejection(false)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : text('否定分析失败，请稍后重试。', '分析の否定に失敗しました。再試行してください。'))
+    } finally {
+      setIsRejecting(false)
+    }
+  }
+
+  const startPreparedRediagnosis = async () => {
+    if (!reanalysisPreparation) return
+    const preparation = reanalysisPreparation
+    // 先关闭问题理解弹窗，避免它与全屏 AI 分析动画处于同一层级而遮挡动画。
+    setReanalysisPreparation(null)
+    setAnalysisOverlayMode('ONSITE_REANALYSIS')
+    setIsReanalyzing(true)
+    setErrorMessage(null)
+    try {
+      const [updated] = await Promise.all([
+        api.startOnsiteRediagnosis(preparation.sourceSessionId, {
+          problemUnderstandingId: preparation.understanding.id,
+          rejection: preparation.request,
+        }),
+        new Promise((resolve) => window.setTimeout(resolve, 2800)),
+      ])
+      setDiagnosis(updated)
+      setReanalysisPreparation(null)
+      window.sessionStorage.setItem('activeDiagnosisSessionId', updated.id)
+    } catch (error) {
+      setReanalysisPreparation(preparation)
+      setErrorMessage(error instanceof Error ? error.message : text('AI 诊断失败，请稍后重试。', 'AI診断に失敗しました。再試行してください。'))
+    } finally {
+      setIsReanalyzing(false)
     }
   }
 
@@ -1513,23 +1575,44 @@ function OnsitePage() {
               </h2>
               <p>{diagnosis.problemUnderstanding.summary}</p>
             </div>
-            <div className="session-facts">
-              <span>
-                <strong>{diagnosis.candidates.length}</strong>
-                {text('当前候选', '現在の候補')}
-              </span>
-              <span>
-                <strong>{diagnosis.nextQuestion?.round ?? '—'}</strong>
-                {text('现场轮次', '現場ラウンド')}
-              </span>
-              <span>
-                <strong>{statusLabel(diagnosis.status, language)}</strong>
-                {text('当前状态', '現在の状態')}
-              </span>
+            <div className="onsite-context-actions">
+              {diagnosis.status !== 'REJECTED' && (
+                <button
+                  className="reject-diagnosis-button"
+                  disabled={isReanalyzing || isSavingReport || isRejecting}
+                  onClick={() => setShowRejection(true)}
+                  type="button"
+                >
+                  <CircleAlert size={15} />
+                  {text('重新分析', '再分析')}
+                </button>
+              )}
+              <div className="session-facts">
+                <span>
+                  <strong>{diagnosis.candidates.length}</strong>
+                  {text('当前候选', '現在の候補')}
+                </span>
+                <span>
+                  <strong>{diagnosis.nextQuestion?.round ?? '—'}</strong>
+                  {text('现场轮次', '現場ラウンド')}
+                </span>
+                <span>
+                  <strong>{statusLabel(diagnosis.status, language)}</strong>
+                  {text('当前状态', '現在の状態')}
+                </span>
+              </div>
             </div>
           </section>
 
-          {diagnosis.nextQuestion ? (
+          {diagnosis.status === 'REJECTED' ? (
+            <section className="onsite-complete rejection-complete">
+              <CircleAlert size={25} />
+              <div>
+                <span className="eyebrow">REJECTED SESSION</span>
+                <h2>{text('该现场会话已被否定', 'この現場セッションは否定されました')}</h2>
+              </div>
+            </section>
+          ) : diagnosis.nextQuestion ? (
             <OnsiteQuestionPanel
               disabled={isReanalyzing}
               key={diagnosis.nextQuestion.id}
@@ -1576,7 +1659,22 @@ function OnsitePage() {
         </section>
       )}
 
-      {isReanalyzing && <AnalysisOverlay mode="ONSITE" />}
+      {isReanalyzing && <AnalysisOverlay mode={analysisOverlayMode} />}
+      {reanalysisPreparation && (
+        <ReanalysisUnderstandingDialog
+          onCancel={() => setReanalysisPreparation(null)}
+          onStart={() => void startPreparedRediagnosis()}
+          understanding={reanalysisPreparation.understanding}
+        />
+      )}
+      {showRejection && diagnosis && (
+        <RejectionDialog
+          diagnosis={diagnosis}
+          isSubmitting={isRejecting}
+          onCancel={() => setShowRejection(false)}
+          onSubmit={(request) => void rejectDiagnosis(request)}
+        />
+      )}
       {selectedEvidence && (
         <EvidenceDialog
           evidence={selectedEvidence}
@@ -1584,6 +1682,129 @@ function OnsitePage() {
         />
       )}
     </main>
+  )
+}
+
+function ReanalysisUnderstandingDialog({
+  onCancel,
+  onStart,
+  understanding,
+}: {
+  onCancel: () => void
+  onStart: () => void
+  understanding: ProblemUnderstanding
+}) {
+  const { text } = useLanguage()
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section
+        aria-label={text('现场重分析的问题理解', '現場再分析の問題理解')}
+        aria-modal="true"
+        className="confirm-dialog reanalysis-understanding-dialog"
+        role="dialog"
+      >
+        <button
+          aria-label={text('关闭', '閉じる')}
+          className="dialog-close"
+          onClick={onCancel}
+          type="button"
+        >
+          <X size={18} />
+        </button>
+        <UnderstandingPanel
+          diagnosisReady={false}
+          onStart={onStart}
+          understanding={understanding}
+        />
+      </section>
+    </div>
+  )
+}
+
+function RejectionDialog({
+  diagnosis,
+  isSubmitting,
+  onCancel,
+  onSubmit,
+}: {
+  diagnosis: DiagnosisSession
+  isSubmitting: boolean
+  onCancel: () => void
+  onSubmit: (request: RejectionRequest) => void
+}) {
+  const { text } = useLanguage()
+  const [scope, setScope] = useState<'WHOLE' | 'CANDIDATES'>('WHOLE')
+  const [selectedCodes, setSelectedCodes] = useState<string[]>([])
+  const [reasonCode, setReasonCode] = useState<RejectionRequest['reasonCode']>()
+  const [reasonText, setReasonText] = useState('')
+  const [onsiteObservation, setOnsiteObservation] = useState('')
+  const invalid =
+    !onsiteObservation.trim() ||
+    (scope === 'CANDIDATES' && selectedCodes.length === 0) ||
+    (reasonCode === 'OTHER' && !reasonText.trim())
+
+  const toggleCandidate = (code: string) => {
+    setSelectedCodes((codes) =>
+      codes.includes(code) ? codes.filter((value) => value !== code) : [...codes, code],
+    )
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section
+        aria-modal="true"
+        className="confirm-dialog rejection-dialog"
+        role="dialog"
+      >
+        <button aria-label={text('关闭', '閉じる')} className="dialog-close" onClick={onCancel} type="button">
+          <X size={18} />
+        </button>
+        <div className="dialog-icon warning"><CircleAlert size={22} /></div>
+        <h2>{text('否定出发前分析', '出発前分析を否定')}</h2>
+        <p>{text('请记录现场实际发现，系统会生成一个新的现场诊断会话。', '現場の実際の発見を記録すると、新しい現場診断セッションを生成します。')}</p>
+        <fieldset className="rejection-fieldset">
+          <legend>{text('否定范围', '否定範囲')}</legend>
+          <label><input checked={scope === 'WHOLE'} name="scope" onChange={() => setScope('WHOLE')} type="radio" /> {text('整体分析', '分析全体')}</label>
+          <label><input checked={scope === 'CANDIDATES'} name="scope" onChange={() => setScope('CANDIDATES')} type="radio" /> {text('指定候选', '候補を指定')}</label>
+        </fieldset>
+        {scope === 'CANDIDATES' && (
+          <div className="rejection-candidates">
+            {diagnosis.candidates.map((candidate) => (
+              <label key={candidate.code}>
+                <input checked={selectedCodes.includes(candidate.code)} onChange={() => toggleCandidate(candidate.code)} type="checkbox" />
+                <span>{candidate.label}</span><small>{candidate.code} · {candidate.supportBand}</small>
+              </label>
+            ))}
+          </div>
+        )}
+        <label className="rejection-input">
+          {text('否定原因（可选）', '否定理由（任意）')}
+          <select onChange={(event) => setReasonCode(event.target.value as RejectionRequest['reasonCode'] || undefined)} value={reasonCode ?? ''}>
+            <option value="">{text('未选择', '未選択')}</option>
+            <option value="SYMPTOM_MISMATCH">{text('症状与现场不符', '症状が現場と不一致')}</option>
+            <option value="MEASUREMENT_CONFLICT">{text('测量结果矛盾', '測定結果が矛盾')}</option>
+            <option value="CAUSE_EXCLUDED">{text('现场已排除原因', '現場で原因を除外')}</option>
+            <option value="OTHER">{text('其他', 'その他')}</option>
+          </select>
+        </label>
+        {reasonCode === 'OTHER' && <label className="rejection-input">{text('原因补充', '理由の補足')}<input onChange={(event) => setReasonText(event.target.value)} value={reasonText} /></label>}
+        <label className="rejection-input">
+          {text('现场实际发现', '現場での実際の発見')} *
+          <textarea onChange={(event) => setOnsiteObservation(event.target.value)} value={onsiteObservation} />
+        </label>
+        <div className="dialog-actions">
+          <button disabled={isSubmitting} onClick={onCancel} type="button">{text('取消', 'キャンセル')}</button>
+          <button
+            className="primary-action"
+            disabled={isSubmitting || invalid}
+            onClick={() => onSubmit({ scope, rejectedCandidateCodes: scope === 'CANDIDATES' ? selectedCodes : [], reasonCode, reasonText: reasonText || undefined, onsiteObservation: onsiteObservation.trim() })}
+            type="button"
+          >
+            {isSubmitting ? text('正在确认…', '確認中…') : text('确认', '確認')}
+          </button>
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -1896,6 +2117,7 @@ function statusLabel(
     return japanese ? '現場結論が収束' : '现场结论已收敛'
   if (status === 'PARTIALLY_SUPPORTED')
     return japanese ? '一部支持' : '部分支持'
+  if (status === 'REJECTED') return japanese ? '否定済み' : '已否定'
   return japanese ? '証拠不足' : '证据不足'
 }
 
