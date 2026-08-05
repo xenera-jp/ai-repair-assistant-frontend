@@ -158,7 +158,7 @@ function App() {
         <AppLink className="brand" to="/pre-departure">
           <span className="brand-mark">AI</span>
           <span>
-            <strong>{text('AI 维修助手', 'AI 修理アシスタント')}</strong>
+            <strong>{text('🔋AI 维修助手', '🔋AI 修理アシスタント')}</strong>
             <small>Repair Intelligence Workspace</small>
           </span>
         </AppLink>
@@ -534,9 +534,8 @@ function UnderstandingPanel({
         <div className="field-grid">
           {understanding.fields.map((field) => (
             <div
-              className={`understood-field level-${field.level.toLowerCase()} ${
-                field.state === 'MISSING' ? 'is-missing' : ''
-              }`}
+              className={`understood-field level-${field.level.toLowerCase()} ${field.state === 'MISSING' ? 'is-missing' : ''
+                }`}
               key={field.code}
             >
               <span className="field-label">
@@ -603,11 +602,11 @@ function AnalysisOverlay({ mode = 'INITIAL' }: { mode?: 'INITIAL' | 'ONSITE' }) 
     mode === 'ONSITE'
       ? language === 'ja-JP'
         ? [
-            ['現場事実を記録', '確認された情報を現場セッションに記録しています'],
-            ['原因候補を検証', '支持・反証シグナルで候補順位を再計算しています'],
-            ['証拠チェーンを更新', '現場事実と過去の修理証拠を関連付けています'],
-            ['収束判定', '追加質問または現場結論の確定を判断しています'],
-          ]
+          ['現場事実を記録', '確認された情報を現場セッションに記録しています'],
+          ['原因候補を検証', '支持・反証シグナルで候補順位を再計算しています'],
+          ['証拠チェーンを更新', '現場事実と過去の修理証拠を関連付けています'],
+          ['収束判定', '追加質問または現場結論の確定を判断しています'],
+        ]
         : [
           ['记录现场事实', '把工程师确认的信息写入现场会话'],
           ['核验候选原因', '根据支持与冲突信号重新计算候选排序'],
@@ -616,17 +615,17 @@ function AnalysisOverlay({ mode = 'INITIAL' }: { mode?: 'INITIAL' | 'ONSITE' }) 
         ]
       : language === 'ja-JP'
         ? [
-            ['問題モデルを解析', '機器、故障分類、検索制約を確認しています'],
-            ['保守知識を検索', '同一型式・同一問題カテゴリの解決済み事例を優先検索しています'],
-            ['履歴証拠を検証', '修理記録、処置結果、実使用部品を関連付けています'],
-            ['診断提案を生成', '証拠の範囲内で原因候補と作業手順を構成しています'],
-          ]
+          ['問題モデルを解析', '機器、故障分類、検索制約を確認しています'],
+          ['保守知識を検索', '同一型式・同一問題カテゴリの解決済み事例を優先検索しています'],
+          ['履歴証拠を検証', '修理記録、処置結果、実使用部品を関連付けています'],
+          ['診断提案を生成', '証拠の範囲内で原因候補と作業手順を構成しています'],
+        ]
         : [
-            ['解析问题模型', '确认设备、故障分类与检索约束'],
-            ['检索维修知识', '优先匹配同型号、同问题类型的已解决案例'],
-            ['核验历史证据', '关联维修记录、处理结果与实际使用备件'],
-            ['生成诊断建议', '在证据边界内组织候选原因与行动步骤'],
-          ]
+          ['解析问题模型', '确认设备、故障分类与检索约束'],
+          ['检索维修知识', '优先匹配同型号、同问题类型的已解决案例'],
+          ['核验历史证据', '关联维修记录、处理结果与实际使用备件'],
+          ['生成诊断建议', '在证据边界内组织候选原因与行动步骤'],
+        ]
   const [phaseIndex, setPhaseIndex] = useState(0)
 
   useEffect(() => {
@@ -899,9 +898,9 @@ function DiagnosisResults({
                         ? text('已验证案例', '検証済み事例')
                         : item.trustLabel === 'AUTHORITATIVE'
                           ? text('官方手册', '公式マニュアル')
-                        : item.trustLabel === 'USER_CONFIRMED'
-                          ? text('现场已确认', '現場確認済み')
-                        : text('历史使用记录', '過去の使用記録')}
+                          : item.trustLabel === 'USER_CONFIRMED'
+                            ? text('现场已确认', '現場確認済み')
+                            : text('历史使用记录', '過去の使用記録')}
                     </span>
                     <strong>{item.title}</strong>
                     <p>{item.summary}</p>
@@ -979,7 +978,7 @@ function DiagnosisResults({
                       <strong>{step.instruction}</strong>
                       <small>
                         {step.sourceLabel === 'SERVICE_MANUAL' ||
-                        step.sourceLabel === 'サービスマニュアル'
+                          step.sourceLabel === 'サービスマニュアル'
                           ? text('来自服务手册', 'サービスマニュアルに基づく')
                           : text('来自已解决维修案例', '解決済み修理事例に基づく')}
                       </small>
@@ -1045,9 +1044,9 @@ function EvidenceDialog({
               ? text('已验证维修结果', '検証済み修理結果')
               : evidence.trustLabel === 'AUTHORITATIVE'
                 ? text('官方服务手册', '公式サービスマニュアル')
-              : evidence.trustLabel === 'USER_CONFIRMED'
-                ? text('工程师现场确认', 'サービス担当者の現場確認')
-                : text('历史备件记录', '過去の使用部品記録')}
+                : evidence.trustLabel === 'USER_CONFIRMED'
+                  ? text('工程师现场确认', 'サービス担当者の現場確認')
+                  : text('历史备件记录', '過去の使用部品記録')}
           </span>
           <span>{evidence.id}</span>
         </div>
@@ -1119,11 +1118,11 @@ function PdfEvidenceViewer({
 
   const regionStyle = sourceRegion
     ? {
-        left: `calc(${(sourceRegion.x / sourceRegion.pageWidth) * 100}% - 4px)`,
-        top: `calc(${(sourceRegion.y / sourceRegion.pageHeight) * 100}% - 3px)`,
-        width: `calc(${(sourceRegion.width / sourceRegion.pageWidth) * 100}% + 8px)`,
-        height: `calc(${(sourceRegion.height / sourceRegion.pageHeight) * 100}% + 6px)`,
-      }
+      left: `calc(${(sourceRegion.x / sourceRegion.pageWidth) * 100}% - 4px)`,
+      top: `calc(${(sourceRegion.y / sourceRegion.pageHeight) * 100}% - 3px)`,
+      width: `calc(${(sourceRegion.width / sourceRegion.pageWidth) * 100}% + 8px)`,
+      height: `calc(${(sourceRegion.height / sourceRegion.pageHeight) * 100}% + 6px)`,
+    }
     : undefined
 
   return (
@@ -1288,9 +1287,9 @@ function OnsitePage() {
             error instanceof Error
               ? error.message
               : text(
-                  '现场诊断会话加载失败，请重新开始出发前分析。',
-                  '現場診断セッションを読み込めません。出発前分析からやり直してください。',
-                ),
+                '现场诊断会话加载失败，请重新开始出发前分析。',
+                '現場診断セッションを読み込めません。出発前分析からやり直してください。',
+              ),
           )
         }
       } finally {
