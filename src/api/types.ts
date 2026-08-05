@@ -100,6 +100,13 @@ export interface EvidenceGroup {
   items: EvidenceItem[]
 }
 
+export interface RepairStep {
+  sequence: number
+  instruction: string
+  sourceLabel: string
+  evidenceIds: string[]
+}
+
 export interface DiagnosisSession {
   id: string
   stage: AnalysisStage
@@ -127,12 +134,7 @@ export interface DiagnosisSession {
       code: string
       name: string
     }>
-    steps: Array<{
-      sequence: number
-      instruction: string
-      sourceLabel: string
-      evidenceIds: string[]
-    }>
+    steps: RepairStep[]
   }
   nextQuestion: OnsiteQuestion | null
   updatedAt: string
