@@ -804,6 +804,9 @@ function DiagnosisResults({
 }) {
   const { language, text } = useLanguage()
   const [stepForSources, setStepForSources] = useState<RepairStep | null>(null)
+  const [expandedEvidenceGroups, setExpandedEvidenceGroups] = useState<Set<string>>(
+    () => new Set(),
+  )
   const candidateCount = diagnosis.candidates.length
   const evidenceCount = diagnosis.evidenceGroups.reduce(
     (sum, group) => sum + group.items.length,
@@ -934,7 +937,12 @@ function DiagnosisResults({
             <ShieldCheck size={19} />
           </div>
           <div className="evidence-groups">
-            {diagnosis.evidenceGroups.map((group) => (
+            {diagnosis.evidenceGroups.map((group) => {
+              const isExpanded = expandedEvidenceGroups.has(group.type)
+              const visibleItems = isExpanded ? group.items : group.items.slice(0, 1)
+              const hiddenItemCount = group.items.length - 1
+
+              return (
               <div className="evidence-group" key={group.type}>
                 <h4>
                   {group.type === 'REPAIR_CASE' ? (
@@ -949,7 +957,7 @@ function DiagnosisResults({
                   {group.label}
                   <span>{group.items.length}</span>
                 </h4>
-                {group.items.map((item) => (
+                {visibleItems.map((item) => (
                   <button
                     className="evidence-item"
                     key={item.id}
@@ -973,8 +981,32 @@ function DiagnosisResults({
                     </span>
                   </button>
                 ))}
+                {hiddenItemCount > 0 && (
+                  <button
+                    aria-expanded={isExpanded}
+                    className="evidence-group-expand"
+                    onClick={() => {
+                      setExpandedEvidenceGroups((current) => {
+                        const next = new Set(current)
+                        if (next.has(group.type)) next.delete(group.type)
+                        else next.add(group.type)
+                        return next
+                      })
+                    }}
+                    type="button"
+                  >
+                    {isExpanded
+                      ? text('收起其余证据', '残りの証拠を閉じる')
+                      : text(
+                          `展开其余 ${hiddenItemCount} 条证据`,
+                          `残り ${hiddenItemCount} 件の証拠を表示`,
+                        )}
+                    <ChevronRight aria-hidden="true" size={14} />
+                  </button>
+                )}
               </div>
-            ))}
+              )
+            })}
           </div>
         </aside>
       </div>
@@ -1577,15 +1609,18 @@ function OnsitePage() {
             </div>
             <div className="onsite-context-actions">
               {diagnosis.status !== 'REJECTED' && (
-                <button
-                  className="reject-diagnosis-button"
-                  disabled={isReanalyzing || isSavingReport || isRejecting}
-                  onClick={() => setShowRejection(true)}
-                  type="button"
-                >
-                  <CircleAlert size={15} />
-                  {text('重新分析', '再分析')}
-                </button>
+                <div className="reanalysis-entry">
+                  <button
+                    className="reject-diagnosis-button other-observation-button"
+                    disabled={isReanalyzing || isSavingReport || isRejecting}
+                    onClick={() => setShowRejection(true)}
+                    type="button"
+                  >
+                    <CircleAlert size={18} />
+                    {text('重新分析', '再分析')}
+                  </button>
+                  <span>{text('现场发现与原分析不一致？', '現場の発見が元の分析と異なりますか？')}</span>
+                </div>
               )}
               <div className="session-facts">
                 <span>
@@ -1669,7 +1704,6 @@ function OnsitePage() {
       )}
       {showRejection && diagnosis && (
         <RejectionDialog
-          diagnosis={diagnosis}
           isSubmitting={isRejecting}
           onCancel={() => setShowRejection(false)}
           onSubmit={(request) => void rejectDiagnosis(request)}
@@ -1722,32 +1756,17 @@ function ReanalysisUnderstandingDialog({
 }
 
 function RejectionDialog({
-  diagnosis,
   isSubmitting,
   onCancel,
   onSubmit,
 }: {
-  diagnosis: DiagnosisSession
   isSubmitting: boolean
   onCancel: () => void
   onSubmit: (request: RejectionRequest) => void
 }) {
   const { text } = useLanguage()
-  const [scope, setScope] = useState<'WHOLE' | 'CANDIDATES'>('WHOLE')
-  const [selectedCodes, setSelectedCodes] = useState<string[]>([])
-  const [reasonCode, setReasonCode] = useState<RejectionRequest['reasonCode']>()
-  const [reasonText, setReasonText] = useState('')
   const [onsiteObservation, setOnsiteObservation] = useState('')
-  const invalid =
-    !onsiteObservation.trim() ||
-    (scope === 'CANDIDATES' && selectedCodes.length === 0) ||
-    (reasonCode === 'OTHER' && !reasonText.trim())
-
-  const toggleCandidate = (code: string) => {
-    setSelectedCodes((codes) =>
-      codes.includes(code) ? codes.filter((value) => value !== code) : [...codes, code],
-    )
-  }
+  const invalid = !onsiteObservation.trim()
 
   return (
     <div className="dialog-backdrop" role="presentation">
@@ -1759,47 +1778,22 @@ function RejectionDialog({
         <button aria-label={text('关闭', '閉じる')} className="dialog-close" onClick={onCancel} type="button">
           <X size={18} />
         </button>
-        <div className="dialog-icon warning"><CircleAlert size={22} /></div>
-        <h2>{text('否定出发前分析', '出発前分析を否定')}</h2>
-        <p>{text('请记录现场实际发现，系统会生成一个新的现场诊断会话。', '現場の実際の発見を記録すると、新しい現場診断セッションを生成します。')}</p>
-        <fieldset className="rejection-fieldset">
-          <legend>{text('否定范围', '否定範囲')}</legend>
-          <label><input checked={scope === 'WHOLE'} name="scope" onChange={() => setScope('WHOLE')} type="radio" /> {text('整体分析', '分析全体')}</label>
-          <label><input checked={scope === 'CANDIDATES'} name="scope" onChange={() => setScope('CANDIDATES')} type="radio" /> {text('指定候选', '候補を指定')}</label>
-        </fieldset>
-        {scope === 'CANDIDATES' && (
-          <div className="rejection-candidates">
-            {diagnosis.candidates.map((candidate) => (
-              <label key={candidate.code}>
-                <input checked={selectedCodes.includes(candidate.code)} onChange={() => toggleCandidate(candidate.code)} type="checkbox" />
-                <span>{candidate.label}</span><small>{candidate.code} · {candidate.supportBand}</small>
-              </label>
-            ))}
-          </div>
-        )}
         <label className="rejection-input">
-          {text('否定原因（可选）', '否定理由（任意）')}
-          <select onChange={(event) => setReasonCode(event.target.value as RejectionRequest['reasonCode'] || undefined)} value={reasonCode ?? ''}>
-            <option value="">{text('未选择', '未選択')}</option>
-            <option value="SYMPTOM_MISMATCH">{text('症状与现场不符', '症状が現場と不一致')}</option>
-            <option value="MEASUREMENT_CONFLICT">{text('测量结果矛盾', '測定結果が矛盾')}</option>
-            <option value="CAUSE_EXCLUDED">{text('现场已排除原因', '現場で原因を除外')}</option>
-            <option value="OTHER">{text('其他', 'その他')}</option>
-          </select>
-        </label>
-        {reasonCode === 'OTHER' && <label className="rejection-input">{text('原因补充', '理由の補足')}<input onChange={(event) => setReasonText(event.target.value)} value={reasonText} /></label>}
-        <label className="rejection-input">
-          {text('现场实际发现', '現場での実際の発見')} *
+          {text('重新描述下问题吧', '問題をもう一度説明してください')} *
           <textarea onChange={(event) => setOnsiteObservation(event.target.value)} value={onsiteObservation} />
         </label>
-        <div className="dialog-actions">
-          <button disabled={isSubmitting} onClick={onCancel} type="button">{text('取消', 'キャンセル')}</button>
+        <div className="dialog-actions rejection-dialog-actions">
+          <button disabled={isSubmitting} onClick={onCancel} type="button">
+            <CircleAlert size={16} />
+            {text('取消', 'キャンセル')}
+          </button>
           <button
             className="primary-action"
             disabled={isSubmitting || invalid}
-            onClick={() => onSubmit({ scope, rejectedCandidateCodes: scope === 'CANDIDATES' ? selectedCodes : [], reasonCode, reasonText: reasonText || undefined, onsiteObservation: onsiteObservation.trim() })}
+            onClick={() => onSubmit({ onsiteObservation: onsiteObservation.trim() })}
             type="button"
           >
+            <SkipForward size={16} />
             {isSubmitting ? text('正在确认…', '確認中…') : text('确认', '確認')}
           </button>
         </div>

@@ -141,19 +141,7 @@ export interface DiagnosisSession {
   updatedAt: string
 }
 
-export type RejectionScope = 'WHOLE' | 'CANDIDATES'
-
-export type RejectionReasonCode =
-  | 'SYMPTOM_MISMATCH'
-  | 'MEASUREMENT_CONFLICT'
-  | 'CAUSE_EXCLUDED'
-  | 'OTHER'
-
 export interface RejectionRequest {
-  scope: RejectionScope
-  rejectedCandidateCodes: string[]
-  reasonCode?: RejectionReasonCode
-  reasonText?: string
   onsiteObservation: string
 }
 
