@@ -3,6 +3,7 @@ import type {
   DiagnosisSession,
   OnsiteQuestionResponse,
   ProblemUnderstanding,
+  RejectionRequest,
   SavedReport,
   SystemStatus,
 } from './types'
@@ -78,6 +79,24 @@ export const api = {
         body: JSON.stringify(input),
       },
     ),
+
+  rejectDiagnosis: (sessionId: string, input: RejectionRequest) =>
+    request<ProblemUnderstanding>(
+      `/api/v1/diagnosis-sessions/${sessionId}/rejections`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
+
+  startOnsiteRediagnosis: (
+    sessionId: string,
+    input: { problemUnderstandingId: string; rejection: RejectionRequest },
+  ) =>
+    request<DiagnosisSession>(`/api/v1/diagnosis-sessions/${sessionId}/reanalysis`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   saveReport: (
     sessionId: string,

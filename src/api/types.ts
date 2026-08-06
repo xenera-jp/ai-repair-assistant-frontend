@@ -116,6 +116,7 @@ export interface DiagnosisSession {
     | 'INSUFFICIENT_EVIDENCE'
     | 'ONSITE_QUESTIONING'
     | 'CONVERGED'
+    | 'REJECTED'
   progress: {
     phase: string
     percent: number
@@ -138,6 +139,10 @@ export interface DiagnosisSession {
   }
   nextQuestion: OnsiteQuestion | null
   updatedAt: string
+}
+
+export interface RejectionRequest {
+  onsiteObservation: string
 }
 
 export interface OnsiteQuestion {
