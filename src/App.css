@@ -1977,7 +1977,7 @@ textarea:focus {
 
 .reanalysis-entry {
   position: absolute;
-  left: 40%;
+  left: 52%;
   display: grid;
   justify-items: center;
   gap: 5px;
