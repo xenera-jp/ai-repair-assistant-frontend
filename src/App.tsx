@@ -5,6 +5,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   CircleAlert,
   ClipboardCheck,
   Database,
@@ -17,6 +19,7 @@ import {
   MessageSquareText,
   PackageCheck,
   Radio,
+  RotateCcw,
   Search,
   Save,
   ShieldCheck,
@@ -88,6 +91,61 @@ const demoScenarios = [
       'RIR1-SSB 显示 E4，冷却能力下降并反复启停。背面明显发热，过滤网上可以看到积尘，柜内实测温度 11°C，问题从今天高峰期开始。',
     questionJa:
       'RIR1-SSB で E4 が表示され、冷却能力が低下して起動と停止を繰り返します。背面が著しく熱く、フィルタにほこりが見えます。庫内実測温度は11°Cで、本日の繁忙時間帯から発生しています。',
+  },
+  {
+    id: 'e6-shutdown',
+    titleZh: 'E6 高压停机',
+    titleJa: 'E6 高電圧停止',
+    descriptionZh: '验证错误码、停机状态与官方手册证据。',
+    descriptionJa: 'エラーコード、停止状態、公式マニュアルの根拠を確認します。',
+    questionZh:
+      'FH1-SSB 显示 E6，高电压报警后压缩机停止运行，目前无法恢复制冷。现场供电未做调整，故障从今天上午开始。',
+    questionJa:
+      'FH1-SSB で E6 が表示され、高電圧警報後にコンプレッサーが停止しました。現在は冷却を再開できません。現場の電源設定は変更しておらず、本日午前から発生しています。',
+  },
+  {
+    id: 'e8-temperature',
+    titleZh: 'E8 温度跳变',
+    titleJa: 'E8 温度表示異常',
+    descriptionZh: '验证传感器、配线与显示回路诊断。',
+    descriptionJa: 'センサー、配線、表示回路の診断を確認します。',
+    questionZh:
+      'FH1-SSB 显示 E8，温度显示反复跳动，与独立温度计测量结果明显不一致。设备仍在运行，柜内实际温度较稳定。',
+    questionJa:
+      'FH1-SSB で E8 が表示され、温度表示が繰り返し変動します。独立温度計の測定値と大きく一致しません。機器は運転中で、庫内の実温度は比較的安定しています。',
+  },
+  {
+    id: 'e9-defrost',
+    titleZh: 'E9 除霜异常',
+    titleJa: 'E9 除霜異常',
+    descriptionZh: '验证结霜现象与除霜系统的证据链。',
+    descriptionJa: '霜付き症状と除霜系統の証拠チェーンを確認します。',
+    questionZh:
+      'FH1-SSB 显示 E9，蒸发器结霜严重，自动除霜后冰霜仍未完全融化。设备制冷能力下降，但风机仍在运行。',
+    questionJa:
+      'FH1-SSB で E9 が表示され、蒸発器に著しい霜付きがあります。自動除霜後も霜が完全に溶けません。冷却能力は低下していますが、ファンは運転しています。',
+  },
+  {
+    id: 'no-code-startup',
+    titleZh: '无错误码启动',
+    titleJa: 'コードなし起動不良',
+    descriptionZh: '没有错误码，依靠症状完成问题分类。',
+    descriptionJa: 'エラーコードなしで、症状から問題を分類します。',
+    questionZh:
+      'FH1-AAC 主电源已经开启，但压缩机没有启动，也测不到运行电流。控制面板未显示错误码，照明和风机可以正常工作。',
+    questionJa:
+      'FH1-AAC の主電源は入っていますが、コンプレッサーが起動せず、運転電流も測定できません。エラーコードは表示されず、照明とファンは正常に動作しています。',
+  },
+  {
+    id: 'showcase-frost',
+    titleZh: '展示柜严重结霜',
+    titleJa: 'ショーケース霜付き',
+    descriptionZh: '验证环境湿度、开门频率与结霜判断。',
+    descriptionJa: '環境湿度、扉の開閉頻度、霜付き判断を確認します。',
+    questionZh:
+      'HNC-120AA 展示柜内部结霜严重，门每天频繁打开，现场环境湿度约 70%。设备没有显示错误码，制冷仍在运行。',
+    questionJa:
+      'HNC-120AA ショーケース内部に著しい霜付きがあります。扉は毎日頻繁に開閉され、現場湿度は約70%です。エラーコードはなく、冷却運転は継続しています。',
   },
 ] as const
 
@@ -305,6 +363,39 @@ function PreDeparturePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
+  const demoScenarioTrackRef = useRef<HTMLDivElement>(null)
+  const [canScrollDemoLeft, setCanScrollDemoLeft] = useState(false)
+  const [canScrollDemoRight, setCanScrollDemoRight] = useState(true)
+
+  useEffect(() => {
+    const track = demoScenarioTrackRef.current
+    if (!track) return
+
+    const updateScrollControls = () => {
+      const maximum = track.scrollWidth - track.clientWidth
+      setCanScrollDemoLeft(track.scrollLeft > 4)
+      setCanScrollDemoRight(track.scrollLeft < maximum - 4)
+    }
+
+    updateScrollControls()
+    track.addEventListener('scroll', updateScrollControls, { passive: true })
+    const resizeObserver = new ResizeObserver(updateScrollControls)
+    resizeObserver.observe(track)
+
+    return () => {
+      track.removeEventListener('scroll', updateScrollControls)
+      resizeObserver.disconnect()
+    }
+  }, [])
+
+  const scrollDemoScenarios = (direction: -1 | 1) => {
+    const track = demoScenarioTrackRef.current
+    if (!track) return
+    track.scrollBy({
+      behavior: 'smooth',
+      left: direction * Math.max(track.clientWidth * 0.82, 280),
+    })
+  }
 
   const recommendedMissing = useMemo(
     () =>
@@ -450,33 +541,55 @@ function PreDeparturePage() {
             <span>{text('典型 Demo', 'デモケース')}</span>
             <small>{text('选择后自动填充', '選択すると自動入力')}</small>
           </div>
-          {demoScenarios.map((scenario) => (
+          <div className="demo-scenario-carousel">
             <button
-              className={selectedDemoId === scenario.id ? 'active' : undefined}
-              key={scenario.id}
-              onClick={() => {
-                setSelectedDemoId(scenario.id)
-                setQuestion(
-                  language === 'ja-JP'
-                    ? scenario.questionJa
-                    : scenario.questionZh,
-                )
-                setUnderstanding(null)
-                setDiagnosis(null)
-                setSavedReportId(null)
-              }}
+              aria-label={text('查看上一组案例', '前のケースを表示')}
+              className="demo-scroll-control previous"
+              disabled={!canScrollDemoLeft}
+              onClick={() => scrollDemoScenarios(-1)}
               type="button"
             >
-              <strong>
-                {language === 'ja-JP' ? scenario.titleJa : scenario.titleZh}
-              </strong>
-              <span>
-                {language === 'ja-JP'
-                  ? scenario.descriptionJa
-                  : scenario.descriptionZh}
-              </span>
+              <ChevronsLeft size={21} />
             </button>
-          ))}
+            <div className="demo-scenario-track" ref={demoScenarioTrackRef}>
+              {demoScenarios.map((scenario) => (
+                <button
+                  className={`demo-scenario-card${selectedDemoId === scenario.id ? ' active' : ''}`}
+                  key={scenario.id}
+                  onClick={() => {
+                    setSelectedDemoId(scenario.id)
+                    setQuestion(
+                      language === 'ja-JP'
+                        ? scenario.questionJa
+                        : scenario.questionZh,
+                    )
+                    setUnderstanding(null)
+                    setDiagnosis(null)
+                    setSavedReportId(null)
+                  }}
+                  type="button"
+                >
+                  <strong>
+                    {language === 'ja-JP' ? scenario.titleJa : scenario.titleZh}
+                  </strong>
+                  <span>
+                    {language === 'ja-JP'
+                      ? scenario.descriptionJa
+                      : scenario.descriptionZh}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              aria-label={text('查看下一组案例', '次のケースを表示')}
+              className="demo-scroll-control next"
+              disabled={!canScrollDemoRight}
+              onClick={() => scrollDemoScenarios(1)}
+              type="button"
+            >
+              <ChevronsRight size={21} />
+            </button>
+          </div>
         </div>
         <textarea
           aria-label={text('故障问题', '故障内容')}
@@ -1436,8 +1549,6 @@ function OnsitePage() {
     'ONSITE' | 'ONSITE_REANALYSIS'
   >('ONSITE')
   const [isSavingReport, setIsSavingReport] = useState(false)
-  const [showRejection, setShowRejection] = useState(false)
-  const [isRejecting, setIsRejecting] = useState(false)
   const [reanalysisPreparation, setReanalysisPreparation] = useState<{
     sourceSessionId: string
     request: RejectionRequest
@@ -1445,6 +1556,9 @@ function OnsitePage() {
   } | null>(null)
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
+  const [correctionText, setCorrectionText] = useState('')
+  const [correctionError, setCorrectionError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1529,35 +1643,57 @@ function OnsitePage() {
     }
   }
 
-  const rejectDiagnosis = async (request: RejectionRequest) => {
+  const openCorrectionDrawer = () => {
     if (!diagnosis) return
-    setIsRejecting(true)
-    setErrorMessage(null)
-    try {
-      const understanding = await api.rejectDiagnosis(diagnosis.id, request)
-      setReanalysisPreparation({
-        sourceSessionId: diagnosis.id,
-        request,
-        understanding,
-      })
-      setSavedReportId(null)
-      setShowRejection(false)
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : text('否定分析失败，请稍后重试。', '分析の否定に失敗しました。再試行してください。'))
-    } finally {
-      setIsRejecting(false)
-    }
+    setCorrectionText(
+      reanalysisPreparation?.sourceSessionId === diagnosis.id
+        ? reanalysisPreparation.request.onsiteObservation
+        : diagnosis.problemUnderstanding.originalText,
+    )
+    setCorrectionError(null)
+    setShowCorrectionDrawer(true)
   }
 
-  const startPreparedRediagnosis = async () => {
-    if (!reanalysisPreparation) return
-    const preparation = reanalysisPreparation
-    // 先关闭问题理解弹窗，避免它与全屏 AI 分析动画处于同一层级而遮挡动画。
-    setReanalysisPreparation(null)
+  const restartDiagnosis = async () => {
+    if (!diagnosis || !correctionText.trim()) return
+    // Hide the correction drawer before starting the request so the analysis
+    // overlay remains visible. Reopen it with the original input on failure.
+    setShowCorrectionDrawer(false)
     setAnalysisOverlayMode('ONSITE_REANALYSIS')
     setIsReanalyzing(true)
+    setCorrectionError(null)
     setErrorMessage(null)
+
     try {
+      const observation = correctionText.trim()
+      let preparation = reanalysisPreparation
+      if (
+        !preparation ||
+        preparation.sourceSessionId !== diagnosis.id ||
+        preparation.request.onsiteObservation !== observation
+      ) {
+        const request: RejectionRequest = { onsiteObservation: observation }
+        const understanding = await api.rejectDiagnosis(diagnosis.id, request)
+        preparation = {
+          sourceSessionId: diagnosis.id,
+          request,
+          understanding,
+        }
+        setReanalysisPreparation(preparation)
+      }
+
+      if (!preparation.understanding.readyForAnalysis) {
+        setCorrectionError(
+          preparation.understanding.blockingMessage ||
+          text(
+            '缺少可靠诊断所需的必要信息，请补充后重试。',
+            '信頼できる診断に必要な情報を追加してください。',
+          ),
+        )
+        setShowCorrectionDrawer(true)
+        return
+      }
+
       const [updated] = await Promise.all([
         api.startOnsiteRediagnosis(preparation.sourceSessionId, {
           problemUnderstandingId: preparation.understanding.id,
@@ -1565,12 +1701,21 @@ function OnsitePage() {
         }),
         new Promise((resolve) => window.setTimeout(resolve, 2800)),
       ])
+
       setDiagnosis(updated)
       setReanalysisPreparation(null)
+      setSavedReportId(null)
       window.sessionStorage.setItem('activeDiagnosisSessionId', updated.id)
     } catch (error) {
-      setReanalysisPreparation(preparation)
-      setErrorMessage(error instanceof Error ? error.message : text('AI 诊断失败，请稍后重试。', 'AI診断に失敗しました。再試行してください。'))
+      setCorrectionError(
+        error instanceof Error
+          ? error.message
+          : text(
+            '重新分析失败，请确认输入后重试。',
+            '再分析に失敗しました。入力内容を確認して再試行してください。',
+          ),
+      )
+      setShowCorrectionDrawer(true)
     } finally {
       setIsReanalyzing(false)
     }
@@ -1607,29 +1752,15 @@ function OnsitePage() {
       ) : diagnosis ? (
         <>
           <section className="onsite-context">
-            <div>
-              <span className="eyebrow">ACTIVE DIAGNOSIS SESSION</span>
-              <h2>
-                {fieldValue(diagnosis, 'equipmentModel', language)} ·{' '}
-                {diagnosis.problemUnderstanding.primaryProblemType.label}
-              </h2>
-              <p>{diagnosis.problemUnderstanding.summary}</p>
-            </div>
-            <div className="onsite-context-actions">
-              {diagnosis.status !== 'REJECTED' && (
-                <div className="reanalysis-entry">
-                  <button
-                    className="reject-diagnosis-button other-observation-button"
-                    disabled={isReanalyzing || isSavingReport || isRejecting}
-                    onClick={() => setShowRejection(true)}
-                    type="button"
-                  >
-                    <CircleAlert size={18} />
-                    {text('重新分析', '再分析')}
-                  </button>
-                  <span>{text('现场发现与原分析不一致？', '現場の発見が元の分析と異なりますか？')}</span>
-                </div>
-              )}
+            <div className="onsite-context-main">
+              <div>
+                <span className="eyebrow">ACTIVE DIAGNOSIS SESSION</span>
+                <h2>
+                  {fieldValue(diagnosis, 'equipmentModel', language)} ·{' '}
+                  {diagnosis.problemUnderstanding.primaryProblemType.label}
+                </h2>
+                <p>{diagnosis.problemUnderstanding.summary}</p>
+              </div>
               <div className="session-facts">
                 <span>
                   <strong>{diagnosis.candidates.length}</strong>
@@ -1645,6 +1776,37 @@ function OnsitePage() {
                 </span>
               </div>
             </div>
+            {diagnosis.status !== 'REJECTED' && (
+              <div className="diagnosis-correction">
+                <span className="correction-icon" aria-hidden="true">
+                  <CircleAlert size={18} />
+                </span>
+                <div>
+                  <strong>
+                    {text(
+                      '现场情况与初步诊断不一致？',
+                      '現場の状況が初期診断と一致しませんか？',
+                    )}
+                  </strong>
+                  <span>
+                    {text(
+                      '补充或修改现场现象后，系统将重新理解问题并检索证据。',
+                      '症状を修正すると、問題分類と根拠検索をもう一度実行します。',
+                    )}
+                  </span>
+                </div>
+                <button
+                  className="correction-action"
+                  disabled={isReanalyzing || isSavingReport}
+                  onClick={openCorrectionDrawer}
+                  type="button"
+                >
+                  <RotateCcw size={15} />
+                  {text('修改描述并重新分析', '症状を修正して再分析')}
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            )}
           </section>
 
           {diagnosis.status === 'REJECTED' ? (
@@ -1703,18 +1865,14 @@ function OnsitePage() {
       )}
 
       {isReanalyzing && <AnalysisOverlay mode={analysisOverlayMode} />}
-      {reanalysisPreparation && (
-        <ReanalysisUnderstandingDialog
-          onCancel={() => setReanalysisPreparation(null)}
-          onStart={() => void startPreparedRediagnosis()}
-          understanding={reanalysisPreparation.understanding}
-        />
-      )}
-      {showRejection && diagnosis && (
-        <RejectionDialog
-          isSubmitting={isRejecting}
-          onCancel={() => setShowRejection(false)}
-          onSubmit={(request) => void rejectDiagnosis(request)}
+      {showCorrectionDrawer && diagnosis && (
+        <DiagnosisCorrectionDrawer
+          diagnosis={diagnosis}
+          errorMessage={correctionError}
+          onCancel={() => setShowCorrectionDrawer(false)}
+          onChange={setCorrectionText}
+          onSubmit={() => void restartDiagnosis()}
+          value={correctionText}
         />
       )}
       {selectedEvidence && (
@@ -1727,84 +1885,119 @@ function OnsitePage() {
   )
 }
 
-function ReanalysisUnderstandingDialog({
+function DiagnosisCorrectionDrawer({
+  diagnosis,
+  errorMessage,
   onCancel,
-  onStart,
-  understanding,
-}: {
-  onCancel: () => void
-  onStart: () => void
-  understanding: ProblemUnderstanding
-}) {
-  const { text } = useLanguage()
-  return (
-    <div className="dialog-backdrop" role="presentation">
-      <section
-        aria-label={text('现场重分析的问题理解', '現場再分析の問題理解')}
-        aria-modal="true"
-        className="confirm-dialog reanalysis-understanding-dialog"
-        role="dialog"
-      >
-        <button
-          aria-label={text('关闭', '閉じる')}
-          className="dialog-close"
-          onClick={onCancel}
-          type="button"
-        >
-          <X size={18} />
-        </button>
-        <UnderstandingPanel
-          diagnosisReady={false}
-          onStart={onStart}
-          understanding={understanding}
-        />
-      </section>
-    </div>
-  )
-}
-
-function RejectionDialog({
-  isSubmitting,
-  onCancel,
+  onChange,
   onSubmit,
+  value,
 }: {
-  isSubmitting: boolean
+  diagnosis: DiagnosisSession
+  errorMessage: string | null
   onCancel: () => void
-  onSubmit: (request: RejectionRequest) => void
+  onChange: (value: string) => void
+  onSubmit: () => void
+  value: string
 }) {
-  const { text } = useLanguage()
-  const [onsiteObservation, setOnsiteObservation] = useState('')
-  const invalid = !onsiteObservation.trim()
+  const { language, text } = useLanguage()
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onCancel])
 
   return (
-    <div className="dialog-backdrop" role="presentation">
+    <div
+      className="dialog-backdrop correction-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel()
+      }}
+      role="presentation"
+    >
       <section
+        aria-labelledby="correction-title"
         aria-modal="true"
-        className="confirm-dialog rejection-dialog"
+        className="correction-drawer"
         role="dialog"
       >
-        <button aria-label={text('关闭', '閉じる')} className="dialog-close" onClick={onCancel} type="button">
-          <X size={18} />
-        </button>
-        <label className="rejection-input">
-          {text('重新描述下问题吧', '問題をもう一度説明してください')} *
-          <textarea onChange={(event) => setOnsiteObservation(event.target.value)} value={onsiteObservation} />
-        </label>
-        <div className="dialog-actions rejection-dialog-actions">
-          <button disabled={isSubmitting} onClick={onCancel} type="button">
-            <CircleAlert size={16} />
-            {text('取消', 'キャンセル')}
-          </button>
+        <header>
+          <div>
+            <span className="eyebrow">DIAGNOSIS CORRECTION</span>
+            <h2 id="correction-title">
+              {text('重新描述现场问题', '現場の症状を修正')}
+            </h2>
+            <p>
+              {text(
+                '当前诊断会保留为历史记录。新描述将生成一条独立、可追溯的诊断会话。',
+                '現在の診断は履歴として保持され、新しい説明から追跡可能な診断セッションを作成します。',
+              )}
+            </p>
+          </div>
           <button
-            className="primary-action"
-            disabled={isSubmitting || invalid}
-            onClick={() => onSubmit({ onsiteObservation: onsiteObservation.trim() })}
+            aria-label={text('关闭', '閉じる')}
+            className="icon-button"
+            onClick={onCancel}
             type="button"
           >
-            <SkipForward size={16} />
-            {isSubmitting ? text('正在确认…', '確認中…') : text('确认', '確認')}
+            <X size={18} />
           </button>
+        </header>
+
+        <div className="correction-drawer-body">
+          <div className="current-diagnosis-summary">
+            <span>{text('当前初步诊断', '現在の初期診断')}</span>
+            <strong>
+              {fieldValue(diagnosis, 'equipmentModel', language)} ·{' '}
+              {diagnosis.problemUnderstanding.primaryProblemType.label}
+            </strong>
+          </div>
+
+          <label htmlFor="corrected-problem-description">
+            {text('现场问题描述', '現場の症状')}
+          </label>
+          <textarea
+            autoFocus
+            id="corrected-problem-description"
+            maxLength={4000}
+            onChange={(event) => onChange(event.target.value)}
+            value={value}
+          />
+          <div className="correction-field-meta">
+            <span>
+              {text(
+                '请写明设备型号、错误码（如有）、现场症状和运行状态。',
+                '型式、エラーコード（ある場合）、現場症状、運転状態を入力してください。',
+              )}
+            </span>
+            <span>{value.length} / 4000</span>
+          </div>
+
+          {errorMessage && (
+            <div className="correction-error" role="alert">
+              <TriangleAlert size={17} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
         </div>
+
+        <footer>
+          <button className="secondary-button" onClick={onCancel} type="button">
+            {text('保留当前诊断', '現在の診断を保持')}
+          </button>
+          <button
+            className="primary-button"
+            disabled={!value.trim()}
+            onClick={onSubmit}
+            type="button"
+          >
+            <RotateCcw size={15} />
+            {text('重新分析', '再分析')}
+          </button>
+        </footer>
       </section>
     </div>
   )
