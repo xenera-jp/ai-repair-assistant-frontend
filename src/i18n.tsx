@@ -1,5 +1,8 @@
 import { createContext, useContext, useMemo, useState } from 'react'
 
+import { STORAGE_KEYS } from './common/constant/storage'
+
+/** 当前界面支持的语言。 */
 export type AppLanguage = 'zh-CN' | 'ja-JP'
 
 interface LanguageContextValue {
@@ -15,15 +18,16 @@ const LanguageContext = createContext<LanguageContextValue | null>(null)
  * Diagnosis responses keep their own language on the server; this context only
  * controls the current UI and the language sent when a new analysis is created.
  */
+/** 向组件树提供当前语言及双语文案选择器。 */
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<AppLanguage>(() => {
-    const saved = window.localStorage.getItem('repair-assistant-language')
+    const saved = window.localStorage.getItem(STORAGE_KEYS.language)
     return saved === 'ja-JP' ? 'ja-JP' : 'zh-CN'
   })
 
   const value = useMemo<LanguageContextValue>(() => {
     const setLanguage = (next: AppLanguage) => {
-      window.localStorage.setItem('repair-assistant-language', next)
+      window.localStorage.setItem(STORAGE_KEYS.language, next)
       setLanguageState(next)
     }
     return {
@@ -41,6 +45,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** 读取全局语言上下文；必须在 LanguageProvider 内使用。 */
 export function useLanguage() {
   const value = useContext(LanguageContext)
   if (!value) {
