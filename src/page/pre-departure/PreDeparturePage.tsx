@@ -1,5 +1,5 @@
-import { BrainCircuit, ChevronRight, Database, LoaderCircle, Search, TriangleAlert } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { BrainCircuit, ChevronRight, ChevronsLeft, ChevronsRight, Database, LoaderCircle, Search, TriangleAlert } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api'
 import { navigate } from '../../common/hook/useAppRoute'
 import { setActiveDiagnosisSessionId } from '../../common/storage/diagnosis-session-storage'
@@ -37,6 +37,61 @@ const demoScenarios = [
     questionJa:
       'RIR1-SSB で E4 が表示され、冷却能力が低下して起動と停止を繰り返します。背面が著しく熱く、フィルタにほこりが見えます。庫内実測温度は11°Cで、本日の繁忙時間帯から発生しています。',
   },
+  {
+    id: 'e6-shutdown',
+    titleZh: 'E6 高压停机',
+    titleJa: 'E6 高電圧停止',
+    descriptionZh: '验证错误码、停机状态与官方手册证据。',
+    descriptionJa: 'エラーコード、停止状態、公式マニュアルの根拠を確認します。',
+    questionZh:
+      'FH1-SSB 显示 E6，高电压报警后压缩机停止运行，目前无法恢复制冷。现场供电未做调整，故障从今天上午开始。',
+    questionJa:
+      'FH1-SSB で E6 が表示され、高電圧警報後にコンプレッサーが停止しました。現在は冷却を再開できません。現場の電源設定は変更しておらず、本日午前から発生しています。',
+  },
+  {
+    id: 'e8-temperature',
+    titleZh: 'E8 温度跳变',
+    titleJa: 'E8 温度表示異常',
+    descriptionZh: '验证传感器、配线与显示回路诊断。',
+    descriptionJa: 'センサー、配線、表示回路の診断を確認します。',
+    questionZh:
+      'FH1-SSB 显示 E8，温度显示反复跳动，与独立温度计测量结果明显不一致。设备仍在运行，柜内实际温度较稳定。',
+    questionJa:
+      'FH1-SSB で E8 が表示され、温度表示が繰り返し変動します。独立温度計の測定値と大きく一致しません。機器は運転中で、庫内の実温度は比較的安定しています。',
+  },
+  {
+    id: 'e9-defrost',
+    titleZh: 'E9 除霜异常',
+    titleJa: 'E9 除霜異常',
+    descriptionZh: '验证结霜现象与除霜系统的证据链。',
+    descriptionJa: '霜付き症状と除霜系統の証拠チェーンを確認します。',
+    questionZh:
+      'FH1-SSB 显示 E9，蒸发器结霜严重，自动除霜后冰霜仍未完全融化。设备制冷能力下降，但风机仍在运行。',
+    questionJa:
+      'FH1-SSB で E9 が表示され、蒸発器に著しい霜付きがあります。自動除霜後も霜が完全に溶けません。冷却能力は低下していますが、ファンは運転しています。',
+  },
+  {
+    id: 'no-code-startup',
+    titleZh: '无错误码启动',
+    titleJa: 'コードなし起動不良',
+    descriptionZh: '没有错误码，依靠症状完成问题分类。',
+    descriptionJa: 'エラーコードなしで、症状から問題を分類します。',
+    questionZh:
+      'FH1-AAC 主电源已经开启，但压缩机没有启动，也测不到运行电流。控制面板未显示错误码，照明和风机可以正常工作。',
+    questionJa:
+      'FH1-AAC の主電源は入っていますが、コンプレッサーが起動せず、運転電流も測定できません。エラーコードは表示されず、照明とファンは正常に動作しています。',
+  },
+  {
+    id: 'showcase-frost',
+    titleZh: '展示柜严重结霜',
+    titleJa: 'ショーケース霜付き',
+    descriptionZh: '验证环境湿度、开门频率与结霜判断。',
+    descriptionJa: '環境湿度、扉の開閉頻度、霜付き判断を確認します。',
+    questionZh:
+      'HNC-120AA 展示柜内部结霜严重，门每天频繁打开，现场环境湿度约 70%。设备没有显示错误码，制冷仍在运行。',
+    questionJa:
+      'HNC-120AA ショーケース内部に著しい霜付きがあります。扉は毎日頻繁に開閉され、現場湿度は約70%です。エラーコードはなく、冷却運転は継続しています。',
+  },
 ] as const
 import { useLanguage } from '../../i18n'
 import type { DiagnosisSession, EvidenceItem, ProblemUnderstanding } from '../../model'
@@ -66,6 +121,36 @@ export function PreDeparturePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
+  const demoScenarioTrackRef = useRef<HTMLDivElement>(null)
+  const [canScrollDemoLeft, setCanScrollDemoLeft] = useState(false)
+  const [canScrollDemoRight, setCanScrollDemoRight] = useState(true)
+
+  useEffect(() => {
+    const track = demoScenarioTrackRef.current
+    if (!track) return
+
+    const updateScrollControls = () => {
+      const maximum = track.scrollWidth - track.clientWidth
+      setCanScrollDemoLeft(track.scrollLeft > 4)
+      setCanScrollDemoRight(track.scrollLeft < maximum - 4)
+    }
+
+    updateScrollControls()
+    track.addEventListener('scroll', updateScrollControls, { passive: true })
+    const resizeObserver = new ResizeObserver(updateScrollControls)
+    resizeObserver.observe(track)
+    return () => {
+      track.removeEventListener('scroll', updateScrollControls)
+      resizeObserver.disconnect()
+    }
+  }, [])
+
+  const scrollDemoScenarios = (direction: -1 | 1) => {
+    demoScenarioTrackRef.current?.scrollBy({
+      behavior: 'smooth',
+      left: direction * Math.max(demoScenarioTrackRef.current.clientWidth * 0.82, 280),
+    })
+  }
 
   const recommendedMissing = useMemo(
     () =>
@@ -211,33 +296,33 @@ export function PreDeparturePage() {
             <span>{text('典型 Demo', 'デモケース')}</span>
             <small>{text('选择后自动填充', '選択すると自動入力')}</small>
           </div>
-          {demoScenarios.map((scenario) => (
-            <button
-              className={selectedDemoId === scenario.id ? 'active' : undefined}
-              key={scenario.id}
-              onClick={() => {
-                setSelectedDemoId(scenario.id)
-                setQuestion(
-                  language === 'ja-JP'
-                    ? scenario.questionJa
-                    : scenario.questionZh,
-                )
-                setUnderstanding(null)
-                setDiagnosis(null)
-                setSavedReportId(null)
-              }}
-              type="button"
-            >
-              <strong>
-                {language === 'ja-JP' ? scenario.titleJa : scenario.titleZh}
-              </strong>
-              <span>
-                {language === 'ja-JP'
-                  ? scenario.descriptionJa
-                  : scenario.descriptionZh}
-              </span>
+          <div className="demo-scenario-carousel">
+            <button aria-label={text('查看上一组案例', '前のケースを表示')} className="demo-scroll-control" disabled={!canScrollDemoLeft} onClick={() => scrollDemoScenarios(-1)} type="button">
+              <ChevronsLeft size={21} />
             </button>
-          ))}
+            <div className="demo-scenario-track" ref={demoScenarioTrackRef}>
+              {demoScenarios.map((scenario) => (
+                <button
+                  className={`demo-scenario-card${selectedDemoId === scenario.id ? ' active' : ''}`}
+                  key={scenario.id}
+                  onClick={() => {
+                    setSelectedDemoId(scenario.id)
+                    setQuestion(language === 'ja-JP' ? scenario.questionJa : scenario.questionZh)
+                    setUnderstanding(null)
+                    setDiagnosis(null)
+                    setSavedReportId(null)
+                  }}
+                  type="button"
+                >
+                  <strong>{language === 'ja-JP' ? scenario.titleJa : scenario.titleZh}</strong>
+                  <span>{language === 'ja-JP' ? scenario.descriptionJa : scenario.descriptionZh}</span>
+                </button>
+              ))}
+            </div>
+            <button aria-label={text('查看下一组案例', '次のケースを表示')} className="demo-scroll-control" disabled={!canScrollDemoRight} onClick={() => scrollDemoScenarios(1)} type="button">
+              <ChevronsRight size={21} />
+            </button>
+          </div>
         </div>
         <textarea
           aria-label={text('故障问题', '故障内容')}

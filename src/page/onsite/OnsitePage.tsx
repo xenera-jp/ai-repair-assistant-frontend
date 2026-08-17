@@ -209,16 +209,23 @@ export function OnsitePage() {
       ) : diagnosis ? (
         <>
           <section className="onsite-context">
-            <div>
-              <span className="eyebrow">ACTIVE DIAGNOSIS SESSION</span>
-              <h2>
-                {fieldValue(diagnosis, 'equipmentModel', language)} ·{' '}
-                {diagnosis.problemUnderstanding.primaryProblemType.label}
-              </h2>
-              <p>{diagnosis.problemUnderstanding.summary}</p>
+            <div className="onsite-context-main">
+              <div>
+                <span className="eyebrow">ACTIVE DIAGNOSIS SESSION</span>
+                <h2>
+                  {fieldValue(diagnosis, 'equipmentModel', language)} ·{' '}
+                  {diagnosis.problemUnderstanding.primaryProblemType.label}
+                </h2>
+                <p>{diagnosis.problemUnderstanding.summary}</p>
+              </div>
+              <div className="session-facts">
+                <span><strong>{diagnosis.candidates.length}</strong>{text('当前候选', '現在の候補')}</span>
+                <span><strong>{diagnosis.nextQuestion?.round ?? '—'}</strong>{text('现场轮次', '現場ラウンド')}</span>
+                <span><strong>{statusLabel(diagnosis.status, language)}</strong>{text('当前状态', '現在の状態')}</span>
+              </div>
             </div>
-            <div className="onsite-context-actions">
-              {diagnosis.status !== 'REJECTED' && (
+            {diagnosis.status !== 'REJECTED' && (
+              <div className="onsite-context-actions">
                 <div className="reanalysis-entry">
                   <div className="reanalysis-notice">
                     <CircleAlert size={27} />
@@ -238,22 +245,8 @@ export function OnsitePage() {
                     <ArrowRight size={16} />
                   </button>
                 </div>
-              )}
-              <div className="session-facts">
-                <span>
-                  <strong>{diagnosis.candidates.length}</strong>
-                  {text('当前候选', '現在の候補')}
-                </span>
-                <span>
-                  <strong>{diagnosis.nextQuestion?.round ?? '—'}</strong>
-                  {text('现场轮次', '現場ラウンド')}
-                </span>
-                <span>
-                  <strong>{statusLabel(diagnosis.status, language)}</strong>
-                  {text('当前状态', '現在の状態')}
-                </span>
               </div>
-            </div>
+            )}
           </section>
 
           {diagnosis.status === 'REJECTED' ? (
