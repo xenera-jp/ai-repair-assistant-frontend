@@ -3,14 +3,19 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 /** 统一处理 JSON 请求、错误负载和泛型响应反序列化。 */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers)
+  if (!(init?.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers,
   })
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => null)
     throw new Error(errorPayload?.detail ?? errorPayload?.message ?? `请求失败（HTTP ${response.status}）`)
   }
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 

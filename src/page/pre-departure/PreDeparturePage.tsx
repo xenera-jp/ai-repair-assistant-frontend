@@ -1,5 +1,5 @@
 import { BrainCircuit, ChevronRight, ChevronsLeft, ChevronsRight, Database, LoaderCircle, Search, TriangleAlert } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api'
 import { navigate } from '../../common/hook/useAppRoute'
 import { setActiveDiagnosisSessionId } from '../../common/storage/diagnosis-session-storage'
@@ -101,6 +101,12 @@ import { RecommendedConfirm } from '../../component/diagnosis/RecommendedConfirm
 import { DiagnosisResults } from '../../component/diagnosis/DiagnosisResults'
 import { EvidenceDialog } from '../../component/evidence/EvidenceDialog'
 
+function getRecommendedMissing(understanding: ProblemUnderstanding) {
+  return understanding.fields.filter(
+    (field) => field.level === 'B' && (field.state === 'MISSING' || field.state === 'NOT_REQUIRED'),
+  )
+}
+
 /** 出发前工作台：输入报障、确认字段完整性并发起初步诊断。 */
 export function PreDeparturePage() {
   const { language, text } = useLanguage()
@@ -121,9 +127,111 @@ export function PreDeparturePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
+  const [recordingApplicationId, setRecordingApplicationId] = useState<string | null>(null)
+  const [recordingBatchId, setRecordingBatchId] = useState<string | null>(null)
   const demoScenarioTrackRef = useRef<HTMLDivElement>(null)
   const [canScrollDemoLeft, setCanScrollDemoLeft] = useState(false)
   const [canScrollDemoRight, setCanScrollDemoRight] = useState(true)
+
+  const startDiagnosis = useCallback(async (
+    currentUnderstanding: ProblemUnderstanding,
+    continueWithoutRecommendedFields: boolean,
+    applicationId: string | null = null,
+  ) => {
+    if (!currentUnderstanding.readyForAnalysis) return
+    setShowRecommendedConfirm(false)
+    setIsDiagnosing(true)
+    setErrorMessage(null)
+
+    try {
+      const [result] = await Promise.all([
+        api.startDiagnosis({
+          problemUnderstandingId: currentUnderstanding.id,
+          continueWithoutRecommendedFields,
+        }),
+        new Promise((resolve) => window.setTimeout(resolve, 2800)),
+      ])
+      setDiagnosis(result)
+      setActiveDiagnosisSessionId(result.id)
+      if (applicationId) {
+        await api.attachDiagnosis(applicationId, result.id)
+        setRecordingApplicationId(null)
+      }
+      window.setTimeout(() => {
+        document
+          .getElementById('diagnosis-result')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : text('AI 诊断失败，请稍后重试。', 'AI診断に失敗しました。再試行してください。'),
+      )
+    } finally {
+      setIsDiagnosing(false)
+    }
+  }, [text])
+
+  // 录音自动进入与手动按钮共用同一个完整性检查入口。
+  const requestDiagnosis = useCallback((
+    currentUnderstanding: ProblemUnderstanding,
+    applicationId: string | null = null,
+  ) => {
+    if (!currentUnderstanding.readyForAnalysis) return
+    setRecordingApplicationId(applicationId)
+    if (getRecommendedMissing(currentUnderstanding).length > 0) {
+      setShowRecommendedConfirm(true)
+      return
+    }
+    void startDiagnosis(currentUnderstanding, false, applicationId)
+  }, [startDiagnosis])
+
+  useEffect(() => {
+    const historyState = window.history.state as { recordingApplicationId?: unknown; recordingBatchId?: unknown } | null
+    const applicationId = typeof historyState?.recordingApplicationId === 'string'
+      ? historyState.recordingApplicationId
+      : null
+    const batchId = typeof historyState?.recordingBatchId === 'string' ? historyState.recordingBatchId : null
+    if (!applicationId) return
+    setRecordingBatchId(batchId)
+    let cancelled = false
+    const run = async () => {
+      setErrorMessage(null)
+      try {
+        const application = await api.getApplication(applicationId)
+        if (cancelled) return
+        setQuestion(application.composedText)
+        setSelectedDemoId('')
+        if (application.diagnosisSessionId) {
+          setDiagnosis(await api.getDiagnosis(application.diagnosisSessionId))
+          return
+        }
+        if (application.consumed) return
+        await api.consumeApplication(applicationId)
+        setIsUnderstanding(true)
+        const result = await api.understandProblem({ stage: 'PRE_DEPARTURE', language, originalText: application.composedText })
+        if (cancelled) return
+        setUnderstanding(result)
+        await api.attachUnderstanding(applicationId, result.id)
+        if (!result.readyForAnalysis) {
+          setRecordingApplicationId(null)
+          return
+        }
+        if (cancelled) return
+        requestDiagnosis(result, applicationId)
+      } catch (error) {
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : text('录音问题自动分析失败，请使用页面按钮重试。', '録音の自動解析に失敗しました。画面のボタンで再試行してください。'))
+      } finally {
+        if (window.history.state?.recordingApplicationId === applicationId) {
+          window.history.replaceState({}, '', window.location.pathname)
+        }
+        if (!cancelled) setIsUnderstanding(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [language, text, requestDiagnosis])
 
   useEffect(() => {
     const track = demoScenarioTrackRef.current
@@ -154,9 +262,7 @@ export function PreDeparturePage() {
 
   const recommendedMissing = useMemo(
     () =>
-      understanding?.fields.filter(
-        (field) => field.level === 'B' && (field.state === 'MISSING' || field.state === 'NOT_REQUIRED'),
-      ) ?? [],
+      understanding ? getRecommendedMissing(understanding) : [],
     [understanding],
   )
 
@@ -181,47 +287,6 @@ export function PreDeparturePage() {
       )
     } finally {
       setIsUnderstanding(false)
-    }
-  }
-
-  const requestDiagnosis = () => {
-    if (!understanding?.readyForAnalysis) return
-    if (recommendedMissing.length > 0) {
-      setShowRecommendedConfirm(true)
-      return
-    }
-    void startDiagnosis(false)
-  }
-
-  const startDiagnosis = async (continueWithoutRecommendedFields: boolean) => {
-    if (!understanding) return
-    setShowRecommendedConfirm(false)
-    setIsDiagnosing(true)
-    setErrorMessage(null)
-
-    try {
-      const [result] = await Promise.all([
-        api.startDiagnosis({
-          problemUnderstandingId: understanding.id,
-          continueWithoutRecommendedFields,
-        }),
-        new Promise((resolve) => window.setTimeout(resolve, 2800)),
-      ])
-      setDiagnosis(result)
-      setActiveDiagnosisSessionId(result.id)
-      window.setTimeout(() => {
-        document
-          .getElementById('diagnosis-result')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 80)
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : text('AI 诊断失败，请稍后重试。', 'AI診断に失敗しました。再試行してください。'),
-      )
-    } finally {
-      setIsDiagnosing(false)
     }
   }
 
@@ -307,6 +372,7 @@ export function PreDeparturePage() {
                   key={scenario.id}
                   onClick={() => {
                     setSelectedDemoId(scenario.id)
+                    setRecordingApplicationId(null)
                     setQuestion(language === 'ja-JP' ? scenario.questionJa : scenario.questionZh)
                     setUnderstanding(null)
                     setDiagnosis(null)
@@ -330,6 +396,7 @@ export function PreDeparturePage() {
           value={question}
           onChange={(event) => {
             setQuestion(event.target.value)
+            setRecordingApplicationId(null)
             setSelectedDemoId('')
             setUnderstanding(null)
             setDiagnosis(null)
@@ -365,7 +432,7 @@ export function PreDeparturePage() {
       {understanding ? (
         <UnderstandingPanel
           diagnosisReady={Boolean(diagnosis)}
-          onStart={requestDiagnosis}
+          onStart={() => requestDiagnosis(understanding, recordingApplicationId)}
           understanding={understanding}
         />
       ) : (
@@ -396,8 +463,15 @@ export function PreDeparturePage() {
       {showRecommendedConfirm && understanding && (
         <RecommendedConfirm
           fields={recommendedMissing}
-          onCancel={() => setShowRecommendedConfirm(false)}
-          onContinue={() => void startDiagnosis(true)}
+          onCancel={() => {
+            if (!recordingApplicationId || !recordingBatchId) {
+              setShowRecommendedConfirm(false)
+              return
+            }
+            window.history.pushState({ recordingBatchId, focusRecordingEditor: true }, '', '/recordings')
+            window.dispatchEvent(new PopStateEvent('popstate'))
+          }}
+          onContinue={() => void startDiagnosis(understanding, true, recordingApplicationId)}
         />
       )}
       {selectedEvidence && (
