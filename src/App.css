@@ -222,8 +222,17 @@ button:disabled {
 .recording-file-meta { min-width: 0; }
 .recording-file-meta strong, .recording-file-meta span, .recording-file-meta small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recording-file-meta span { margin-top: 4px; color: var(--text-3); font-size: 12px; }
+.recording-file-details { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .recording-file-meta small { margin-top: 5px; color: var(--red); }
-.recording-file audio { width: 100%; height: 38px; }
+.recording-file audio { display: block; width: 100%; height: 38px; background: transparent; }
+.recording-audio-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-width: 0; padding-right: 7px; border-radius: 999px; background: #f1f3f4; overflow: hidden; }
+.recording-audio-controls audio::-webkit-media-controls-enclosure { background: transparent; }
+.recording-file-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.recording-file-actions .primary-button, .recording-file-actions .secondary-button { min-height: 36px; padding: 7px 11px; white-space: nowrap; }
+.recording-delete-button { position: relative; z-index: 1; display: grid; width: 32px; height: 32px; margin-left: -12px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #111827; background: transparent; }
+.recording-delete-button:hover { color: var(--red); background: rgba(17, 24, 39, .08); }
+.secondary-button.danger { color: var(--red); }
+.recording-uploading, .recording-pending-state { display: inline-flex; align-items: center; gap: 7px; color: var(--teal); }
 .transcript-area { padding-top: 18px; padding-bottom: 18px; }
 .transcript-tabs { display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .transcript-tabs button { flex: 0 0 auto; max-width: 260px; padding: 7px 16px; overflow: hidden; border: 0; border-bottom: 2px solid transparent; color: var(--text-3); background: transparent; text-overflow: ellipsis; white-space: nowrap; }
@@ -236,6 +245,12 @@ button:disabled {
 .transcript-segments article > button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; color: var(--teal); background: transparent; font: 12px "SFMono-Regular", Consolas, monospace; }
 .transcript-segments article strong { font-size: 13px; }
 .transcript-segments article p { margin: 0; color: var(--text-2); line-height: 1.65; }
+.transcript-segments article.upcoming { opacity: .62; border-left-color: var(--line-strong); }
+.transcript-segments article.played { border-left-color: var(--teal); }
+.transcript-segments article.active { border-left-color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 24%, transparent); }
+.recording-transcript-pending { padding: 16px; border: 1px dashed var(--line-strong); border-radius: 7px; color: var(--text-3); text-align: center; }
+.recording-extraction-wait { display: flex; justify-content: center; }
+.recording-extraction-wait span { display: inline-flex; align-items: center; min-height: 34px; padding: 7px 14px; border: 1px solid rgba(217, 119, 6, .28); border-radius: 999px; color: #b45309; background: rgba(245, 158, 11, .1); font-size: 13px; font-weight: 700; }
 .recording-empty { padding: 42px; color: var(--text-3); text-align: center; }
 .recording-loading {
   display: flex;
@@ -261,8 +276,9 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .recording-transcription-console .orbit, .recording-transcription-console .scan-line, .recording-loading .spin { animation: none; }
 }
-.recording-file-meta .recording-file-status { display: flex; align-items: center; gap: 6px; }
+.recording-file-meta .recording-file-status { display: inline-flex; align-items: center; gap: 6px; }
 .recording-file-status > svg { flex-shrink: 0; color: var(--teal); }
+.recording-file-meta .recording-file-status.transcribing { padding: 5px 10px; overflow: visible; border: 1px solid color-mix(in srgb, var(--teal) 38%, transparent); border-radius: 999px; color: var(--teal); background: color-mix(in srgb, var(--teal) 12%, var(--surface-1)); font-weight: 700; letter-spacing: .02em; }
 .recording-inline-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding: 12px; color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
 .extracted-list { display: grid; gap: 9px; margin-top: 18px; }
 .extracted-list article { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 56px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; }
@@ -3270,6 +3286,7 @@ textarea:focus {
 .identifier-correction-dialog .recording-evidence-body article .issue-actions .secondary-button { border: 1px solid var(--line-strong); color: var(--text-1); background: var(--surface-2); }
 .identifier-correction-dialog .recording-evidence-body b { color: var(--color-primary, #2563eb); }
 .identifier-correction-tag { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border: 1px solid rgba(232, 100, 90, .28); border-radius: 999px; color: #d9574f; background: rgba(232, 100, 90, .1); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.identifier-manual-required-tag { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border: 1px solid rgba(232, 100, 90, .28); border-radius: 999px; color: #d9574f; background: rgba(232, 100, 90, .1); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .identifier-unresolved { display: block; margin-top: 5px; color: #b45309; }
 .manual-correction-field { display: grid; gap: 6px; }
 .manual-correction-field span { color: var(--text-2); font-size: .86rem; }
