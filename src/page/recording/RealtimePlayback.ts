@@ -2,19 +2,24 @@ import { recordingApi } from '../../api'
 import { HttpRequestError } from '../../api/client'
 import type { RecordingBatch } from '../../model'
 
-/** A persistent graph per media element. Browsers cannot attach a second source to an element. */
-const graphs = new WeakMap<HTMLAudioElement, { context: AudioContext; capture: AudioWorkletNode }>()
+const SAMPLE_RATE = 24000
+const FRAME_SAMPLES = 2400
+const MAX_QUEUED_FRAMES = 5
 
 export class RealtimePlayback {
   private sessionId = ''
-  private graph: { context: AudioContext; capture: AudioWorkletNode } | null = null
+  private decoded: AudioBuffer | null = null
+  private context: AudioContext | null = null
+  private readonly download = new AbortController()
+  private cursor = 0
+  private capturing = false
+  private pumping = false
   private queue: ArrayBuffer[] = []
   private sending = false
   private sample = 0
   private stopped = false
   private ending = false
   private finishSent = false
-  private flushWaiter: (() => void) | null = null
   private timer: number | undefined
   private autoResume = false
   private throttle() { this.pause(); this.autoResume = true; this.onBackpressure() }
@@ -23,8 +28,9 @@ export class RealtimePlayback {
     this.autoResume = false
     void this.resume().catch((error) => this.onError(error instanceof Error ? error.message : 'REALTIME_INPUT_FAILED'))
   }
-  private readonly playing = () => this.graph?.capture.port.postMessage({ enabled: true })
-  private readonly waiting = () => this.graph?.capture.port.postMessage({ enabled: false })
+  private readonly playing = () => { if (!this.stopped && !this.ending) this.capturing = true }
+  private readonly waiting = () => { this.capturePlayed(true); this.capturing = false }
+  private readonly timeupdate = () => { if (this.capturing) this.capturePlayed() }
   private audio: HTMLAudioElement
   private fileId: string
   private onBatch: (batch: RecordingBatch) => void
@@ -37,67 +43,105 @@ export class RealtimePlayback {
     this.onError = onError; this.onBackpressure = onBackpressure
     audio.addEventListener('playing', this.playing)
     audio.addEventListener('waiting', this.waiting)
+    audio.addEventListener('pause', this.waiting)
+    audio.addEventListener('timeupdate', this.timeupdate)
   }
 
   async start() {
-    // Called from the user's button event, before awaiting any network request.
-    let graph = graphs.get(this.audio)
-    if (!graph) {
-      const context = new AudioContext({ sampleRate: 24000 })
-      try {
-        if (!context.audioWorklet) throw new Error('AUDIO_WORKLET_UNAVAILABLE')
-        await context.audioWorklet.addModule(`${import.meta.env.BASE_URL}realtime-pcm-worklet.js`)
-        if (this.stopped) { await context.close(); return }
-        const source = context.createMediaElementSource(this.audio)
-        const capture = new AudioWorkletNode(context, 'realtime-pcm', { outputChannelCount: [1] })
-        source.connect(capture); capture.connect(context.destination)
-        graph = { context, capture }; graphs.set(this.audio, graph)
-      } catch (error) { await context.close(); throw error }
-    }
-    this.graph = graph
-    await graph.context.resume()
-    if (this.stopped) return
-    graph.capture.port.onmessage = ({ data }: MessageEvent<ArrayBuffer>) => {
+    // Decode the same file the player uses. AudioWorklet and microphone permissions are unnecessary.
+    const context = new AudioContext({ sampleRate: SAMPLE_RATE })
+    this.context = context
+    try {
+      const response = await fetch(this.audio.currentSrc || this.audio.src, { signal: this.download.signal })
+      if (!response.ok) throw new Error('REALTIME_AUDIO_LOAD_FAILED')
+      const bytes = await response.arrayBuffer()
       if (this.stopped) return
-      if (!data.byteLength) { this.flushWaiter?.(); this.flushWaiter = null; return }
-      this.queue.push(data)
-      if (this.queue.length >= 5) this.throttle()
-      void this.drain()
+      let decoded: AudioBuffer
+      try { decoded = await context.decodeAudioData(bytes) }
+      catch { throw new Error('REALTIME_AUDIO_DECODE_FAILED') }
+      if (this.stopped) return
+      this.decoded = decoded
+    } finally {
+      if (this.context === context) { this.context = null; await context.close() }
     }
+    if (this.stopped) return
     const started = await recordingApi.startRealtime(this.fileId)
-    if (this.stopped) { void recordingApi.cancelRealtime(started.sessionId); return }
+    if (this.stopped) { void recordingApi.cancelRealtime(started.sessionId).catch(() => {}); return }
     this.sessionId = started.sessionId
     this.onBatch(started.batch)
     this.audio.currentTime = 0
     await this.resume()
     this.timer = window.setInterval(() => {
       if (!this.audio.paused && document.hidden) this.throttle()
+      if (this.capturing) this.capturePlayed()
       this.continueAfterPressure()
-    }, 500)
+    }, 25)
+  }
+
+  // Only enqueue samples already reached by the media clock, never future audio.
+  private capturePlayed(flush = false) {
+    const decoded = this.decoded
+    if (!decoded || this.stopped || this.finishSent || this.pumping || !this.sessionId) return
+    this.pumping = true
+    try {
+      const total = Math.floor(decoded.length * SAMPLE_RATE / decoded.sampleRate)
+      const played = Math.min(total, Math.floor(this.audio.currentTime * SAMPLE_RATE))
+      const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i))
+      while (this.cursor < played && this.queue.length < MAX_QUEUED_FRAMES) {
+        const count = Math.min(FRAME_SAMPLES, played - this.cursor)
+        if (count < FRAME_SAMPLES && !flush) break
+        const frame = new ArrayBuffer(count * 2)
+        const pcm = new DataView(frame)
+        for (let i = 0; i < count; i++) {
+          const index = Math.min(decoded.length - 1, Math.floor((this.cursor + i) * decoded.sampleRate / SAMPLE_RATE))
+          let value = 0
+          for (const channel of channels) value += channel[index] / channels.length
+          value = Math.max(-1, Math.min(1, value))
+          pcm.setInt16(i * 2, Math.round(value * (value < 0 ? 32768 : 32767)), true)
+        }
+        this.cursor += count
+        this.queue.push(frame)
+        void this.drain()
+      }
+      if (this.queue.length >= MAX_QUEUED_FRAMES && !this.ending && !this.audio.paused) this.throttle()
+    } finally { this.pumping = false }
   }
 
   async resume() {
     if (this.stopped || this.ending) return
     if (this.queue.length || this.sending) throw new Error('REALTIME_DRAINING')
-    await this.graph?.context.resume()
+    // Catch up any played samples held back by the bounded queue before advancing playback.
+    this.capturePlayed(true)
+    if (this.queue.length || this.sending) { this.autoResume = true; return }
     try { await this.audio.play() }
     catch (error) { this.pause(); throw error }
   }
-  pause() { this.autoResume = false; this.audio.pause(); this.graph?.capture.port.postMessage({ enabled: false }) }
+  pause() {
+    this.autoResume = false
+    this.audio.pause()
+    this.capturePlayed(true)
+    this.capturing = false
+  }
+
+  private removeListeners() {
+    this.audio.removeEventListener('playing', this.playing)
+    this.audio.removeEventListener('waiting', this.waiting)
+    this.audio.removeEventListener('pause', this.waiting)
+    this.audio.removeEventListener('timeupdate', this.timeupdate)
+  }
 
   async finish() {
     if (this.stopped || this.ending) return
     this.ending = true
     this.pause()
-    // Acknowledge the worklet flush before finishing; no tail frame may be lost.
-    await new Promise<void>((resolve) => {
-      this.flushWaiter = resolve
-      this.graph?.capture.port.postMessage({ enabled: false, flushAck: true })
-    })
-    this.audio.removeEventListener('playing', this.playing)
-    this.audio.removeEventListener('waiting', this.waiting)
-    if (this.graph) this.graph.capture.port.onmessage = null
-    while (!this.stopped && (this.sending || this.queue.length)) await new Promise<void>((resolve) => window.setTimeout(resolve, 25))
+    this.removeListeners()
+    if (this.timer !== undefined) window.clearInterval(this.timer)
+    // Flush the played tail even if a slow request temporarily filled the queue.
+    while (!this.stopped) {
+      this.capturePlayed(true)
+      if (!this.sending && !this.queue.length) break
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 25))
+    }
     if (!this.stopped && this.sessionId) {
       try { this.finishSent = true; this.onBatch(await recordingApi.finishRealtime(this.sessionId)) }
       catch (error) {
@@ -106,33 +150,24 @@ export class RealtimePlayback {
         this.dispose()
       }
     }
-    if (this.timer !== undefined) window.clearInterval(this.timer)
+    this.decoded = null
   }
 
   async playEvidence(startMs: number) {
     if (!this.finishSent) return
-    await this.graph?.context.resume()
     this.audio.currentTime = startMs / 1000
     await this.audio.play()
   }
 
-  dispose(release = false) {
-    if (release && this.graph) {
-      graphs.delete(this.audio)
-      void this.graph.context.close()
-    }
+  dispose(_release = false) {
     if (this.stopped) return
     this.stopped = true
-    this.pause(); this.queue = []
-    this.audio.removeEventListener('playing', this.playing)
-    this.audio.removeEventListener('waiting', this.waiting)
-    this.flushWaiter?.(); this.flushWaiter = null
+    this.download.abort()
+    if (this.context) { void this.context.close().catch(() => {}); this.context = null }
+    this.pause(); this.queue = []; this.decoded = null
+    this.removeListeners()
     if (this.timer !== undefined) window.clearInterval(this.timer)
     if (this.sessionId && !this.finishSent) void recordingApi.cancelRealtime(this.sessionId).catch(() => {})
-    if (this.graph) {
-      this.graph.capture.port.onmessage = null
-      if (!release) void this.graph.context.suspend()
-    }
   }
 
   private async drain() {

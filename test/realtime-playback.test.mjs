@@ -10,8 +10,8 @@ const source = ts.transpileModule(readFileSync(new URL('../src/page/recording/Re
   .replace('import.meta.env.BASE_URL', "''") + '\nglobalThis.Playback = RealtimePlayback;'
 
 function fixture() {
-  let capture
-  const calls = [], commands = [], errors = []
+  let decodingError = null
+  const calls = [], errors = []
   class Audio extends EventTarget {
     paused = true
     currentTime = 0
@@ -25,42 +25,34 @@ function fixture() {
     finishRealtime: async () => { calls.push({type:'finish'});return {id:'batch'} },
     cancelRealtime: async () => { calls.push({type:'cancel'}) },
   }
+  const channels = [new Float32Array(24000 * 4).fill(0.5), new Float32Array(24000 * 4).fill(-0.25)]
   class Context {
-    audioWorklet = { addModule: async () => {} }
-    createMediaElementSource() { return {connect:()=>{}} }
-    resume() { return Promise.resolve() }
-    suspend() { return Promise.resolve() }
+    async decodeAudioData() {
+      if (decodingError) throw decodingError
+      return { length: channels[0].length, sampleRate:24000, numberOfChannels:2, getChannelData:(i)=>channels[i] }
+    }
     close() { return Promise.resolve() }
   }
-  class Capture {
-    constructor() {
-      capture = this
-      this.port = { onmessage:null, postMessage: (command) => {
-        commands.push(command)
-        if(command.flushAck)queueMicrotask(()=>this.port.onmessage?.({data:new ArrayBuffer(0)}))
-      } }
-    }
-    connect() {}
-  }
-  const context = vm.createContext({recordingApi:api,HttpRequestError,AudioContext:Context,AudioWorkletNode:Capture,
+  const context = vm.createContext({recordingApi:api,HttpRequestError,AudioContext:Context,
+    fetch:async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(8)}),AbortController,
     window:{setInterval,clearInterval,setTimeout},document:{hidden:false},setTimeout,console,
     btoa:(value)=>Buffer.from(value,'binary').toString('base64')})
   vm.runInContext(source,context)
   const audio = new Audio()
   let pressure = 0
   const playback = new context.Playback(audio,'file',()=>{},(error)=>errors.push(error),()=>{pressure++})
-  return {playback,audio,calls,commands,errors,api,HttpRequestError,
-    send:(samples)=>capture.port.onmessage?.({data:new Int16Array(samples).buffer}),
-    get pressure() {return pressure},get capture() {return capture}}
+  return {playback,audio,calls,errors,api,HttpRequestError,channels,document:context.document,
+    send:(samples)=>{audio.currentTime += samples/24000;audio.dispatchEvent(new Event('timeupdate'))},
+    get pressure() {return pressure},failDecode:()=>{decodingError=new Error('decode failed')}}
 }
 const settle = () => new Promise((resolve)=>setImmediate(resolve))
 
-test('start sends no audio before worklet frames and pause/resume preserves sample cursor',async()=>{
+test('HTTP file decoding sends no audio before playback advances and pause/resume preserves sample cursor',async()=>{
   const f=fixture()
   try {
     await f.playback.start(); assert.equal(f.calls.length,0)
     f.send(2400); await settle()
-    f.playback.pause(); assert.equal(f.audio.paused,true);assert.equal(f.commands.at(-1).enabled,false)
+    f.playback.pause(); assert.equal(f.audio.paused,true)
     await f.playback.resume(); f.send(2400);await settle()
     assert.deepEqual(f.calls.filter(x=>x.type==='frame').map(x=>x.start),[0,2400])
   } finally {f.playback.dispose(true)}
@@ -74,7 +66,7 @@ test('finish drains pending audio before ending and evidence replay does not sen
     assert.deepEqual(f.calls.map(x=>x.type),['frame','finish'])
     await f.playback.playEvidence(1000)
     assert.equal(f.audio.currentTime,1)
-    assert.equal(f.capture.port.onmessage,null)
+    f.send(2400);await settle()
     assert.equal(f.calls.filter(x=>x.type==='frame').length,1)
   } finally {f.playback.dispose(true)}
 })
@@ -118,4 +110,60 @@ test('backpressure resumes playback automatically after the queued frames drain'
     assert.equal(f.audio.paused,false)
     assert.equal(f.errors.length,0)
   } finally {f.playback.dispose(true)}
+})
+
+test('PCM is mono little endian and independent of player volume',async()=>{
+  const f=fixture();let bytes
+  f.api.realtimeFrame=async(id,start,audio)=>{bytes=Buffer.from(audio,'base64');return{nextSample:start+bytes.length/2}}
+  try {
+    await f.playback.start();f.audio.volume=0;f.send(2400);await settle()
+    assert.equal(bytes.length,4800);assert.equal(bytes.readInt16LE(0),4096)
+  } finally {f.playback.dispose(true)}
+})
+
+test('pause flushes a partial frame and finish preserves the final played tail',async()=>{
+  const f=fixture()
+  try {
+    await f.playback.start();f.send(1200);await settle();assert.equal(f.calls.length,0)
+    f.playback.pause();await settle();assert.equal(f.calls[0].samples,1200)
+    await f.playback.resume();f.send(600);await f.playback.finish()
+    assert.deepEqual(f.calls.map(x=>x.type),['frame','frame','finish'])
+    assert.equal(f.calls[1].samples,600);assert.equal(f.calls[1].start,1200)
+  } finally {f.playback.dispose(true)}
+})
+
+test('a stalled player does not send audio beyond its playback position',async()=>{
+  const f=fixture()
+  try {
+    await f.playback.start();f.send(1200);f.audio.dispatchEvent(new Event('waiting'));await settle()
+    assert.equal(f.calls[0].samples,1200)
+    await new Promise(done=>setTimeout(done,70))
+    assert.equal(f.calls.length,1)
+    f.audio.dispatchEvent(new Event('playing'));f.send(2400);await settle()
+    assert.equal(f.calls[1].start,1200)
+  } finally {f.playback.dispose(true)}
+})
+
+test('finish drains a bounded backlog including samples not yet enqueued',async()=>{
+  const f=fixture();let resolve;let first=true
+  f.api.realtimeFrame=async(id,start,audio)=>{
+    if(first){first=false;await new Promise(done=>{resolve=done})}
+    f.calls.push({type:'frame',start,samples:Buffer.from(audio,'base64').length/2})
+    return{nextSample:start+Buffer.from(audio,'base64').length/2}
+  }
+  try {
+    await f.playback.start();f.send(24000)
+    assert.equal(f.audio.paused,true)
+    const finish=f.playback.finish();resolve();await finish
+    assert.equal(f.calls.filter(x=>x.type==='frame').reduce((sum,x)=>sum+x.samples,0),24000)
+    assert.equal(f.calls.at(-1).type,'finish')
+  } finally {f.playback.dispose(true)}
+})
+
+test('decode failure never creates a realtime session',async()=>{
+  const f=fixture();let opened=false
+  f.api.startRealtime=async()=>{opened=true;return{sessionId:'session',batch:{}}}
+  f.failDecode()
+  try {await assert.rejects(()=>f.playback.start(),/REALTIME_AUDIO_DECODE_FAILED/);assert.equal(opened,false)}
+  finally {f.playback.dispose(true)}
 })
