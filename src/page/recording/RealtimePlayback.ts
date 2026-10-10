@@ -38,13 +38,14 @@ export class RealtimePlayback {
   private readonly timeupdate = () => { if (this.capturing) this.capturePlayed() }
   private audio: HTMLAudioElement
   private fileId: string
+  private localFile?: Blob
   private onBatch: (batch: RecordingBatch) => void
   private onError: (message: string) => void
   private onBackpressure: () => void
   constructor(audio: HTMLAudioElement, fileId: string,
     onBatch: (batch: RecordingBatch) => void, onError: (message: string) => void,
-    onBackpressure: () => void) {
-    this.audio = audio; this.fileId = fileId; this.onBatch = onBatch
+    onBackpressure: () => void, localFile?: Blob) {
+    this.audio = audio; this.fileId = fileId; this.onBatch = onBatch; this.localFile = localFile
     this.onError = onError; this.onBackpressure = onBackpressure
     audio.addEventListener('playing', this.playing)
     audio.addEventListener('waiting', this.waiting)
@@ -57,9 +58,18 @@ export class RealtimePlayback {
     const context = new AudioContext({ sampleRate: SAMPLE_RATE })
     this.context = context
     try {
-      const response = await fetch(this.audio.currentSrc || this.audio.src, { signal: this.download.signal })
-      if (!response.ok) throw new Error('REALTIME_AUDIO_LOAD_FAILED')
-      const bytes = await response.arrayBuffer()
+      let source: Blob
+      let bytes: ArrayBuffer
+      if (this.localFile) {
+        source = this.localFile
+        bytes = await source.arrayBuffer()
+      } else {
+        // Existing recordings without a browser-local file retain the server fallback.
+        const response = await fetch(this.audio.currentSrc || this.audio.src, { signal: this.download.signal })
+        if (!response.ok) throw new Error('REALTIME_AUDIO_LOAD_FAILED')
+        bytes = await response.arrayBuffer()
+        source = new Blob([bytes], { type: response.headers.get('Content-Type') || 'application/octet-stream' })
+      }
       if (this.stopped) return
       let decoded: AudioBuffer
       try { decoded = await context.decodeAudioData(bytes.slice(0)) }
@@ -69,7 +79,7 @@ export class RealtimePlayback {
       this.channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i))
       // Reuse the downloaded file for playback instead of issuing a second streaming HTTP request.
       this.originalSrc = this.audio.src
-      this.playbackUrl = URL.createObjectURL(new Blob([bytes], { type: response.headers.get('Content-Type') || 'application/octet-stream' }))
+      this.playbackUrl = URL.createObjectURL(source)
       this.audio.src = this.playbackUrl
       this.audio.load()
     } finally {

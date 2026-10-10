@@ -20,6 +20,8 @@ export function RecordingPage() {
   const [isStartingRealtime, setIsStartingRealtime] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [localRecording, setLocalRecording] = useState<{ id: string; file: File; url: string } | null>(null)
+  const localRecordingRef = useRef<typeof localRecording>(null)
   const [batch, setBatch] = useState<RecordingBatch | null>(null)
   const [activeFileId, setActiveFileId] = useState('')
   const [isUploading, setIsUploading] = useState(false)
@@ -37,7 +39,7 @@ export function RecordingPage() {
     if (pollingStatus === 'DIARIZATION_FAILED') realtimePlayback.current?.pause()
   }, [pollingStatus])
 
-  useEffect(() => () => { realtimePlayback.current?.dispose(true); uploadController.current?.abort() }, [])
+  useEffect(() => () => { realtimePlayback.current?.dispose(true); uploadController.current?.abort(); if (localRecordingRef.current) URL.revokeObjectURL(localRecordingRef.current.url); localRecordingRef.current = null }, [])
 
   useEffect(() => {
     const interrupt = () => realtimePlayback.current?.dispose(true)
@@ -143,6 +145,8 @@ export function RecordingPage() {
   const resetRecording = () => {
     realtimePlayback.current?.dispose(true); realtimePlayback.current = null
     Object.values(audioRefs.current).forEach((audio) => audio?.pause())
+    if (localRecordingRef.current) URL.revokeObjectURL(localRecordingRef.current.url)
+    localRecordingRef.current = null; setLocalRecording(null)
     setBatch(null); setActiveFileId(''); setPendingFile(null); setStreamDrafts({})
     transcriptSegmentRefs.current = {}
     setPlaybackState('NOT_READY'); setCurrentTimeMs(0)
@@ -162,7 +166,11 @@ export function RecordingPage() {
         if (staleFileId) void recordingApi.deleteFile(staleFileId)
         return
       }
-      setBatch(next); setActiveFileId(next.files[0]?.id ?? ''); setPendingFile(null)
+      const fileId = next.files[0]?.id
+      if (localRecordingRef.current) URL.revokeObjectURL(localRecordingRef.current.url)
+      const local = fileId ? { id: fileId, file, url: URL.createObjectURL(file) } : null
+      localRecordingRef.current = local; setLocalRecording(local)
+      setBatch(next); setActiveFileId(fileId ?? ''); setPendingFile(null)
       transcriptSegmentRefs.current = {}
        setPlaybackState('NOT_READY'); setCurrentTimeMs(0)
     } catch (reason) {
@@ -212,7 +220,7 @@ export function RecordingPage() {
       const engine = new RealtimePlayback(audio, activeFile.id,
         (next) => setBatch((current) => current?.id === next.id ? next : current),
         (detail) => { setError(message(new Error(detail), text)); setPlaybackState('PAUSED') },
-        () => {})
+        () => {}, localRecording?.id === activeFile.id ? localRecording.file : undefined)
       realtimePlayback.current = engine
       try { await engine.start() } catch (reason) { engine.dispose(); realtimePlayback.current = null; setError(message(reason, text)) }
       finally { setIsStartingRealtime(false) }
@@ -292,7 +300,7 @@ export function RecordingPage() {
           <div className="section-title"><FileAudio size={19}/><div><h2>{text('录音文件', '録音ファイル')}</h2><p>{statusText(batch.status, text)} · {batch.files.length} {text('个文件', 'ファイル')}</p></div></div>
           <div className="recording-file-list">{batch.files.map((file) => <div className="recording-file" key={file.id}>
             <div className="recording-file-meta"><strong>{file.name}</strong><div className="recording-file-details"><span>{formatBytes(file.sizeBytes)}</span><span aria-live="polite" className={`recording-file-status${file.status === 'TRANSCRIBING' ? ' transcribing' : ''}`} role="status">{file.status === 'TRANSCRIBING' && <LoaderCircle className="spin" size={15} aria-hidden="true"/>}{fileStatus(file.status, text)}</span></div>{file.errorMessage && <small>{file.errorMessage}</small>}</div>
-            <div className="recording-audio-controls"><div className="recording-player"><audio crossOrigin="anonymous" controls={!file.realtime || file.status === 'COMPLETED'} preload="metadata" ref={(node) => { audioRefs.current[file.id] = node }} src={recordingApi.audioUrl(file.id)} onLoadedMetadata={() => setPlaybackState('READY')} onPlay={() => setPlaybackState('PLAYING')} onPause={() => { setPlaybackState((current) => current === 'ENDED' ? current : 'PAUSED') }} onEnded={() => { if (!file.realtime || file.status === 'COMPLETED') setPlaybackState('ENDED'); else void endPlayback() }} onTimeUpdate={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))} onSeeked={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))}/>{file.realtime && file.status !== 'COMPLETED' && <span aria-live="off">{formatTime(currentTimeMs)}</span>}{(!file.realtime || file.status === 'COMPLETED') && <RecordingVolume getAudio={() => audioRefs.current[file.id]} label={text('音量', '音量')}/>}</div><button aria-label={text('删除录音', '録音を削除')} className="recording-delete-button" onClick={() => void deleteRecording()} title={text('删除', '削除')} type="button"><Trash2 size={16}/></button></div>
+            <div className="recording-audio-controls"><div className="recording-player"><audio crossOrigin="anonymous" controls={!file.realtime || file.status === 'COMPLETED'} preload="metadata" ref={(node) => { audioRefs.current[file.id] = node }} src={localRecording?.id === file.id ? localRecording.url : recordingApi.audioUrl(file.id)} onLoadedMetadata={() => setPlaybackState('READY')} onPlay={() => setPlaybackState('PLAYING')} onPause={() => { setPlaybackState((current) => current === 'ENDED' ? current : 'PAUSED') }} onEnded={() => { if (!file.realtime || file.status === 'COMPLETED') setPlaybackState('ENDED'); else void endPlayback() }} onTimeUpdate={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))} onSeeked={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))}/>{file.realtime && file.status !== 'COMPLETED' && <span aria-live="off">{formatTime(currentTimeMs)}</span>}{(!file.realtime || file.status === 'COMPLETED') && <RecordingVolume getAudio={() => audioRefs.current[file.id]} label={text('音量', '音量')}/>}</div><button aria-label={text('删除录音', '録音を削除')} className="recording-delete-button" onClick={() => void deleteRecording()} title={text('删除', '削除')} type="button"><Trash2 size={16}/></button></div>
             <div className="recording-file-actions">
               {(file.realtime ? file.status === 'PREPARED' : playbackState !== 'PLAYING') && <button className="primary-button" disabled={playbackState === 'NOT_READY' || isStartingRealtime} onClick={() => void togglePlayback()} type="button">{isStartingRealtime ? <LoaderCircle className="spin" size={15}/> : <Play size={15}/>} {isStartingRealtime ? text('正在连接', '接続中') : text('开始播放', '再生開始')}</button>}
               {file.realtime && realtimePlayback.current && playbackState !== 'ENDED' && ['REALTIME_TRANSCRIBING', 'DIARIZATION_FAILED'].includes(file.status) && <button className="primary-button" onClick={() => void endPlayback()} type="button"><Square size={15}/>{text('结束', '終了')}</button>}
