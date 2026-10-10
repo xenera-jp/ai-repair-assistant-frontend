@@ -395,7 +395,8 @@ function PendingRecording({ file, onRemove, removeLabel }: { file: File; onRemov
 function message(value: unknown, text: (zh: string, ja: string) => string) {
   const detail = value instanceof Error ? value.message : ''
   const known: Record<string, string> = {
-    AUDIO_WORKLET_UNAVAILABLE: text('实时模拟需要 HTTPS 或 localhost，并使用支持音频处理的浏览器。', 'リアルタイムデモにはHTTPSまたはlocalhostと、音声処理に対応したブラウザーが必要です。'),
+    REALTIME_AUDIO_LOAD_FAILED: text('无法读取录音文件，请检查网络连接及跨域配置。', '録音ファイルを読み込めません。ネットワーク接続とCORS設定を確認してください。'),
+    REALTIME_AUDIO_DECODE_FAILED: text('浏览器无法解码该录音，请转换为 MP3 或 WAV 后重试。', 'この録音をブラウザーでデコードできません。MP3またはWAVに変換して再試行してください。'),
     REALTIME_DRAINING: text('音频仍在发送，请稍候再继续。', '音声を送信中です。しばらく待ってから再開してください。'),
     REALTIME_FRAME_ORDER: text('音频帧确认不一致，请重头演示。', '音声フレームの確認が一致しません。デモをやり直してください。'),
     REALTIME_INPUT_FAILED: text('实时音频输入失败，请重头演示。', 'リアルタイム音声入力に失敗しました。デモをやり直してください。'),
