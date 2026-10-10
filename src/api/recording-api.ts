@@ -12,6 +12,7 @@ export const recordingApi = {
   getBatch: (id: string) => request<RecordingBatch>(`/api/v1/recording-batches/${id}`),
   startRealtime: (fileId: string) => request<{ sessionId: string; batch: RecordingBatch }>(`/api/v1/recording-files/${fileId}/realtime-sessions`, { method: 'POST', signal: AbortSignal.timeout(45000) }),
   realtimeFrame: (id: string, startSample: number, audio: string) => request<{ nextSample: number }>(`/api/v1/recording-realtime-sessions/${id}/frames`, { method: 'POST', body: JSON.stringify({ startSample, audio }), signal: AbortSignal.timeout(15000) }),
+  realtimeFrames: (id: string, frames: { startSample: number; audio: string }[]) => request<{ nextSample: number; blocked: boolean }>(`/api/v1/recording-realtime-sessions/${id}/frame-batches`, { method: 'POST', body: JSON.stringify(frames), signal: AbortSignal.timeout(15000) }),
   finishRealtime: (id: string) => request<RecordingBatch>(`/api/v1/recording-realtime-sessions/${id}/finish`, { method: 'POST', signal: AbortSignal.timeout(15000) }),
   cancelRealtime: (id: string) => request<void>(`/api/v1/recording-realtime-sessions/${id}`, { method: 'DELETE', keepalive: true }),
   transcriptionStreamUrl: (id: string) => apiUrl(`/api/v1/recording-batches/${id}/transcription-stream`),
