@@ -212,7 +212,7 @@ export function RecordingPage() {
       const engine = new RealtimePlayback(audio, activeFile.id,
         (next) => setBatch((current) => current?.id === next.id ? next : current),
         (detail) => { setError(message(new Error(detail), text)); setPlaybackState('PAUSED') },
-        () => setError(text('正在等待音频处理，处理完成后自动继续播放。', '音声処理を待っています。処理完了後に自動で再生を続けます。')))
+        () => {})
       realtimePlayback.current = engine
       try { await engine.start() } catch (reason) { engine.dispose(); realtimePlayback.current = null; setError(message(reason, text)) }
       finally { setIsStartingRealtime(false) }
