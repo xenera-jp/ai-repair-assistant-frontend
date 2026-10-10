@@ -9,9 +9,10 @@ const source = ts.transpileModule(readFileSync(new URL('../src/page/recording/Re
 }).outputText.replace(/^import .*$/gm, '').replace('export class RealtimePlayback', 'class RealtimePlayback')
   .replace('import.meta.env.BASE_URL', "''") + '\nglobalThis.Playback = RealtimePlayback;'
 
-function fixture() {
+function fixture(localFile) {
   let decodingError = null
   let playbackBlob
+  let downloads = 0
   const calls = [], errors = [], revoked = []
   class Audio extends EventTarget {
     src = 'http://server/file.mp3'
@@ -44,16 +45,16 @@ function fixture() {
     close() { return Promise.resolve() }
   }
   const context = vm.createContext({recordingApi:api,HttpRequestError,AudioContext:Context,
-    Blob,URL:{createObjectURL:(blob)=>{playbackBlob=blob;return 'blob:local-recording'},revokeObjectURL:(url)=>revoked.push(url)},fetch:async()=>({ok:true,headers:{get:()=> 'audio/mpeg'},arrayBuffer:async()=>new ArrayBuffer(8)}),AbortController,
+    Blob,URL:{createObjectURL:(blob)=>{playbackBlob=blob;return 'blob:local-recording'},revokeObjectURL:(url)=>revoked.push(url)},fetch:async()=>{downloads++;return{ok:true,headers:{get:()=> 'audio/mpeg'},arrayBuffer:async()=>new ArrayBuffer(8)}},AbortController,
     window:{setInterval,clearInterval,setTimeout},document:{hidden:false},setTimeout,console,
     btoa:(value)=>Buffer.from(value,'binary').toString('base64')})
   vm.runInContext(source,context)
   const audio = new Audio()
   let pressure = 0
-  const playback = new context.Playback(audio,'file',()=>{},(error)=>errors.push(error),()=>{pressure++})
+  const playback = new context.Playback(audio,'file',()=>{},(error)=>errors.push(error),()=>{pressure++},localFile)
   return {playback,audio,calls,errors,api,HttpRequestError,channels,revoked,document:context.document,
     send:(samples)=>{audio.currentTime += samples/24000;audio.dispatchEvent(new Event('timeupdate'))},
-    get blob() {return playbackBlob},get pressure() {return pressure},failDecode:()=>{decodingError=new Error('decode failed')}}
+    get downloads() {return downloads},get blob() {return playbackBlob},get pressure() {return pressure},failDecode:()=>{decodingError=new Error('decode failed')}}
 }
 const settle = () => new Promise((resolve)=>setImmediate(resolve))
 
@@ -251,4 +252,20 @@ test('playback uses the downloaded local file and disposal restores the source',
     f.playback.dispose(true)
     assert.equal(f.audio.src,'http://server/file.mp3');assert.deepEqual(f.revoked,['blob:local-recording'])
   } finally {f.playback.dispose(true)}
+})
+test('selected local recording never downloads content and preserves bytes through decoding',async()=>{
+  const file=new Blob([new Uint8Array([1,2,3,4,5,6,7,8])],{type:'audio/mpeg'})
+  const f=fixture(file)
+  try {
+    await f.playback.start()
+    assert.equal(f.downloads,0);assert.equal(f.blob,file)
+    assert.deepEqual(Array.from(new Uint8Array(await f.blob.arrayBuffer())),[1,2,3,4,5,6,7,8])
+    f.send(2400);await settle();assert.equal(f.calls[0].samples,2400)
+  } finally {f.playback.dispose(true)}
+})
+
+test('existing recording without a local file keeps the remote content fallback',async()=>{
+  const f=fixture()
+  try {await f.playback.start();assert.equal(f.downloads,1)}
+  finally {f.playback.dispose(true)}
 })
