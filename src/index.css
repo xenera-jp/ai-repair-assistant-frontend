@@ -1,5 +1,5 @@
 html {
-  background: #080b12;
+  background: var(--surface-0, #0d1320);
 }
 
 #root {

@@ -49,7 +49,9 @@ button:disabled {
 }
 
 .app-shell {
+  display: flow-root;
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--text-1);
   background:
     radial-gradient(circle at 12% -10%, rgba(88, 209, 189, 0.13), transparent 31rem),
@@ -58,6 +60,7 @@ button:disabled {
   transition: background 180ms ease, color 180ms ease;
 }
 
+:root:has(.app-shell[data-theme='light']),
 .app-shell[data-theme='light'] {
   --surface-0: #f5f8fc;
   --surface-1: #ffffff;
@@ -217,6 +220,7 @@ button:disabled {
 .pending-recording > button { display: grid; padding: 5px; border: 0; color: var(--text-3); background: transparent; }
 .recording-actions { display: flex; min-height: 52px; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 16px; }
 .recording-actions small { color: var(--text-3); }
+.recording-transfer-notices { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .recording-file-list { display: grid; gap: 10px; margin-top: 18px; }
 .recording-file { display: grid; grid-template-columns: minmax(210px, 1fr) minmax(280px, 1.3fr) auto; align-items: center; gap: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
 .recording-file-meta { min-width: 0; }
@@ -225,11 +229,14 @@ button:disabled {
 .recording-file-details { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .recording-file-meta small { margin-top: 5px; color: var(--red); }
 .recording-file audio { display: block; width: 100%; height: 38px; background: transparent; }
-.recording-audio-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-width: 0; padding-right: 7px; border-radius: 999px; background: #f1f3f4; overflow: hidden; }
+.recording-audio-controls { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 7px 0 12px; border-radius: 999px; background: var(--surface-3); color: var(--text-1); overflow: hidden; }
+.recording-audio-controls audio { flex: 1; min-width: 0; color-scheme: inherit; }
+.recording-audio-controls audio:not([controls]) { display: none; }
+.recording-player > span { flex: 1; padding: 10px 0; font-variant-numeric: tabular-nums; }
 .recording-audio-controls audio::-webkit-media-controls-enclosure { background: transparent; }
 .recording-file-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .recording-file-actions .primary-button, .recording-file-actions .secondary-button { min-height: 36px; padding: 7px 11px; white-space: nowrap; }
-.recording-delete-button { position: relative; z-index: 1; display: grid; width: 32px; height: 32px; margin-left: -12px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #111827; background: transparent; }
+.recording-delete-button { position: relative; z-index: 1; display: grid; flex: 0 0 32px; width: 32px; height: 32px; margin-left: auto; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--text-2); background: transparent; }
 .recording-delete-button:hover { color: var(--red); background: rgba(17, 24, 39, .08); }
 .secondary-button.danger { color: var(--red); }
 .recording-uploading, .recording-pending-state { display: inline-flex; align-items: center; gap: 7px; color: var(--teal); }
@@ -245,6 +252,11 @@ button:disabled {
 .transcript-segments article > button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; color: var(--teal); background: transparent; font: 12px "SFMono-Regular", Consolas, monospace; }
 .transcript-segments article strong { font-size: 13px; }
 .transcript-segments article p { margin: 0; color: var(--text-2); line-height: 1.65; }
+.recording-speaker-inline { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
+.recording-segment-speaker .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.recording-segment-speaker { display: inline-flex; align-items: center; justify-self: start; gap: 8px; white-space: nowrap; font-size: 12px; }
+.transcript-segments .recording-segment-speaker select { width: 64px; min-width: 64px; max-width: 64px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 5px; color: var(--text-1); background: var(--surface-1); }
+@media (max-width: 900px) { .recording-segment-speaker { grid-column: 1 / -1; } }
 .transcript-segments article.upcoming { opacity: .62; border-left-color: var(--line-strong); }
 .transcript-segments article.played { border-left-color: var(--teal); }
 .transcript-segments article.active { border-left-color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 24%, transparent); }
@@ -3301,3 +3313,26 @@ textarea:focus {
 .correction-bulk-actions .correction-confirm-button:hover { box-shadow: 0 7px 16px rgba(215, 137, 37, .28); transform: translateY(-1px); }
 .correction-bulk-actions button:focus-visible { outline: 2px solid color-mix(in srgb, var(--teal) 72%, transparent); outline-offset: 2px; }
 @media (max-width: 720px) { .correction-bulk-footer { align-items: stretch; flex-direction: column; } .correction-bulk-actions { display: grid; grid-template-columns: 1fr 1fr; } .correction-bulk-actions .correction-cancel-button, .correction-bulk-actions .correction-confirm-button { width: 100%; } }
+
+.recording-summary-actions { max-width: 1180px; margin: 0 auto 22px; padding: 0 40px; align-items: center; }
+.recording-audio-controls { position: relative; overflow: visible; }
+.recording-audio-controls audio::-webkit-media-controls-volume-control-container,
+.recording-audio-controls audio::-webkit-media-controls-volume-slider-container,
+.recording-audio-controls audio::-webkit-media-controls-mute-button,
+.recording-audio-controls audio::-webkit-media-controls-volume-slider { display: none !important; }
+.recording-audio-controls audio::-webkit-media-controls-timeline { flex: 1 1 auto; min-width: 0; margin-right: 30px; }
+.recording-volume { position: absolute; right: 42px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; z-index: 1; }
+.recording-volume-button { display: flex; align-items: center; justify-content: center; width: 30px; height: 32px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.recording-volume-popup { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 5; display: flex; justify-content: center; padding: 14px 10px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-3); box-shadow: 0 4px 16px #0002; }
+.recording-volume-popup input { writing-mode: vertical-lr; direction: rtl; width: 18px; height: 100px; accent-color: var(--text-1); cursor: pointer; }
+@media (max-width: 760px) { .recording-summary-actions { padding: 0 24px; } }
+
+.recording-player { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
+
+/* Before extraction, end the page at its actions without reserving a results area. */
+body:has(.recording-page[data-extraction-visible='false']),
+#root:has(.recording-page[data-extraction-visible='false']),
+.app-shell:has(.recording-page[data-extraction-visible='false']) { min-height: 0; }
+.recording-page[data-extraction-visible='false'] { padding-bottom: 0; }
+.recording-page[data-extraction-visible='false'] .recording-summary-actions { margin-bottom: 0; }
+.recording-page[data-extraction-visible='false'] .recording-extraction-wait { margin-bottom: 0; }
