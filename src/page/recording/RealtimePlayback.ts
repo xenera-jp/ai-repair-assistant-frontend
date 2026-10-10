@@ -4,12 +4,17 @@ import type { RecordingBatch } from '../../model'
 
 const SAMPLE_RATE = 24000
 const FRAME_SAMPLES = 2400
-const MAX_QUEUED_FRAMES = 5
+// Absorb up to two seconds of network jitter; upstream model pressure still pauses immediately.
+const MAX_QUEUED_FRAMES = 20
+const MAX_BATCH_FRAMES = 5
 
 export class RealtimePlayback {
   private sessionId = ''
   private decoded: AudioBuffer | null = null
   private context: AudioContext | null = null
+  private channels: Float32Array[] = []
+  private playbackUrl = ''
+  private originalSrc = ''
   private readonly download = new AbortController()
   private cursor = 0
   private capturing = false
@@ -57,10 +62,16 @@ export class RealtimePlayback {
       const bytes = await response.arrayBuffer()
       if (this.stopped) return
       let decoded: AudioBuffer
-      try { decoded = await context.decodeAudioData(bytes) }
+      try { decoded = await context.decodeAudioData(bytes.slice(0)) }
       catch { throw new Error('REALTIME_AUDIO_DECODE_FAILED') }
       if (this.stopped) return
       this.decoded = decoded
+      this.channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i))
+      // Reuse the downloaded file for playback instead of issuing a second streaming HTTP request.
+      this.originalSrc = this.audio.src
+      this.playbackUrl = URL.createObjectURL(new Blob([bytes], { type: response.headers.get('Content-Type') || 'application/octet-stream' }))
+      this.audio.src = this.playbackUrl
+      this.audio.load()
     } finally {
       if (this.context === context) { this.context = null; await context.close() }
     }
@@ -86,7 +97,7 @@ export class RealtimePlayback {
     try {
       const total = Math.floor(decoded.length * SAMPLE_RATE / decoded.sampleRate)
       const played = Math.min(total, Math.floor(this.audio.currentTime * SAMPLE_RATE))
-      const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i))
+      const channels = this.channels
       while (this.cursor < played && this.queue.length < MAX_QUEUED_FRAMES) {
         const count = Math.min(FRAME_SAMPLES, played - this.cursor)
         if (count < FRAME_SAMPLES && !flush) break
@@ -101,10 +112,12 @@ export class RealtimePlayback {
         }
         this.cursor += count
         this.queue.push(frame)
-        void this.drain()
+
       }
       if (this.queue.length >= MAX_QUEUED_FRAMES && !this.ending && !this.audio.paused) this.throttle()
     } finally { this.pumping = false }
+    // Collect the full played range first, so delayed ticks can share one HTTP request.
+    void this.drain()
   }
 
   async resume() {
@@ -150,7 +163,7 @@ export class RealtimePlayback {
         this.dispose()
       }
     }
-    this.decoded = null
+    this.decoded = null; this.channels = []
   }
 
   async playEvidence(startMs: number) {
@@ -164,7 +177,11 @@ export class RealtimePlayback {
     this.stopped = true
     this.download.abort()
     if (this.context) { void this.context.close().catch(() => {}); this.context = null }
-    this.pause(); this.queue = []; this.decoded = null
+    this.pause(); this.queue = []; this.decoded = null; this.channels = []
+    if (this.playbackUrl) {
+      if (this.audio.src === this.playbackUrl) { this.audio.src = this.originalSrc; this.audio.load() }
+      URL.revokeObjectURL(this.playbackUrl); this.playbackUrl = ''
+    }
     this.removeListeners()
     if (this.timer !== undefined) window.clearInterval(this.timer)
     if (this.sessionId && !this.finishSent) void recordingApi.cancelRealtime(this.sessionId).catch(() => {})
@@ -175,25 +192,41 @@ export class RealtimePlayback {
     this.sending = true
     try {
       while (this.queue.length && !this.stopped) {
-        const frame = this.queue[0]
-        const bytes = new Uint8Array(frame)
-        const audio = btoa(String.fromCharCode(...bytes))
-        let next: { nextSample: number } | undefined
+        const batch = this.queue.slice(0, MAX_BATCH_FRAMES)
+        let endSample = this.sample
+        const frames = batch.map((frame) => {
+          const startSample = endSample
+          const bytes = new Uint8Array(frame)
+          endSample += bytes.length / 2
+          return { startSample, audio: btoa(String.fromCharCode(...bytes)) }
+        })
+        let next: { nextSample: number; blocked: boolean } | undefined
         let networkRetry = false
         while (!this.stopped && !next) {
-          try { next = await recordingApi.realtimeFrame(this.sessionId, this.sample, audio) }
+          try { next = await recordingApi.realtimeFrames(this.sessionId, frames) }
           catch (error) {
             if (error instanceof HttpRequestError && error.status === 429) {
               this.throttle()
               await new Promise<void>((resolve) => window.setTimeout(resolve, 500))
             } else if (!(error instanceof HttpRequestError) && !networkRetry) {
-              networkRetry = true // Same frame is idempotent even if its first response was lost.
+              networkRetry = true // Same batch is idempotent even if its first response was lost.
             } else throw error
           }
         }
         if (!next || this.stopped) return
-        if (next.nextSample !== this.sample + bytes.length / 2) throw new Error('REALTIME_FRAME_ORDER')
-        this.sample = next.nextSample; this.queue.shift()
+        let acknowledged = 0
+        let boundary = this.sample
+        while (acknowledged < batch.length && boundary < next.nextSample) {
+          boundary += batch[acknowledged].byteLength / 2
+          acknowledged++
+        }
+        if (boundary !== next.nextSample || (!acknowledged && !next.blocked)) throw new Error('REALTIME_FRAME_ORDER')
+        this.sample = next.nextSample
+        this.queue.splice(0, acknowledged)
+        if (next.blocked) {
+          this.throttle()
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 500))
+        }
       }
     } catch (error) {
       this.onError(error instanceof Error ? error.message : 'REALTIME_INPUT_FAILED')
