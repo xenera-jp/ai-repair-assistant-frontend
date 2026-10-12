@@ -30,7 +30,7 @@ export function AppShell({ children, path }: AppShellProps) {
           </span>
         </AppLink>
         <nav aria-label={text('主要导航', 'メインナビゲーション')}>
-          <AppLink className={path === '/recordings' ? 'active' : undefined} to="/recordings">{text('录音分析', '録音分析')}</AppLink>
+          <AppLink className={path === '/recordings' ? 'active' : undefined} to="/recordings">{text('音频分析', '音声分析')}</AppLink>
           <AppLink className={path === '/pre-departure' ? 'active' : undefined} to="/pre-departure">{text('出发前分析', '出発前分析')}</AppLink>
           <AppLink className={path === '/onsite' ? 'active' : undefined} to="/onsite">{text('现场分析', '現場分析')}</AppLink>
           <AppLink className={path === '/reports' ? 'active' : undefined} to="/reports">{text('诊断报告', '診断レポート')}</AppLink>

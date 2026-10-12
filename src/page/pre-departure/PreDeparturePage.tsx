@@ -1,5 +1,5 @@
 import { BrainCircuit, ChevronRight, ChevronsLeft, ChevronsRight, Database, LoaderCircle, Search, TriangleAlert } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { navigate } from '../../common/hook/useAppRoute'
 import { setActiveDiagnosisSessionId } from '../../common/storage/diagnosis-session-storage'
@@ -97,15 +97,8 @@ import { useLanguage } from '../../i18n'
 import type { DiagnosisSession, EvidenceItem, ProblemUnderstanding } from '../../model'
 import { UnderstandingPanel } from '../../component/diagnosis/UnderstandingPanel'
 import { AnalysisOverlay } from '../../component/diagnosis/AnalysisOverlay'
-import { RecommendedConfirm } from '../../component/diagnosis/RecommendedConfirm'
 import { DiagnosisResults } from '../../component/diagnosis/DiagnosisResults'
 import { EvidenceDialog } from '../../component/evidence/EvidenceDialog'
-
-function getRecommendedMissing(understanding: ProblemUnderstanding) {
-  return understanding.fields.filter(
-    (field) => field.level === 'B' && (field.state === 'MISSING' || field.state === 'NOT_REQUIRED'),
-  )
-}
 
 /** 出发前工作台：输入报障、确认字段完整性并发起初步诊断。 */
 export function PreDeparturePage() {
@@ -121,23 +114,19 @@ export function PreDeparturePage() {
   const [diagnosis, setDiagnosis] = useState<DiagnosisSession | null>(null)
   const [isUnderstanding, setIsUnderstanding] = useState(false)
   const [isDiagnosing, setIsDiagnosing] = useState(false)
-  const [showRecommendedConfirm, setShowRecommendedConfirm] = useState(false)
   const [selectedEvidence, setSelectedEvidence] =
     useState<EvidenceItem | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
-  const [recordingBatchId, setRecordingBatchId] = useState<string | null>(null)
   const demoScenarioTrackRef = useRef<HTMLDivElement>(null)
   const [canScrollDemoLeft, setCanScrollDemoLeft] = useState(false)
   const [canScrollDemoRight, setCanScrollDemoRight] = useState(true)
 
   const startDiagnosis = useCallback(async (
     currentUnderstanding: ProblemUnderstanding,
-    continueWithoutRecommendedFields: boolean,
   ) => {
     if (!currentUnderstanding.readyForAnalysis) return
-    setShowRecommendedConfirm(false)
     setIsDiagnosing(true)
     setErrorMessage(null)
 
@@ -145,7 +134,7 @@ export function PreDeparturePage() {
       const [result] = await Promise.all([
         api.startDiagnosis({
           problemUnderstandingId: currentUnderstanding.id,
-          continueWithoutRecommendedFields,
+          continueWithoutRecommendedFields: true,
         }),
         new Promise((resolve) => window.setTimeout(resolve, 2800)),
       ])
@@ -167,26 +156,12 @@ export function PreDeparturePage() {
     }
   }, [text])
 
-  // 录音来源与手动按钮共用同一个完整性检查入口。
-  const requestDiagnosis = useCallback((
-    currentUnderstanding: ProblemUnderstanding,
-  ) => {
-    if (!currentUnderstanding.readyForAnalysis) return
-    if (getRecommendedMissing(currentUnderstanding).length > 0) {
-      setShowRecommendedConfirm(true)
-      return
-    }
-    void startDiagnosis(currentUnderstanding, false)
-  }, [startDiagnosis])
-
   useEffect(() => {
     const historyState = window.history.state as { recordingProblemDescription?: unknown; recordingBatchId?: unknown } | null
     const problemDescription = typeof historyState?.recordingProblemDescription === 'string'
       ? historyState.recordingProblemDescription
       : null
-    const batchId = typeof historyState?.recordingBatchId === 'string' ? historyState.recordingBatchId : null
     if (!problemDescription) return
-    setRecordingBatchId(batchId)
     setQuestion(problemDescription)
     setSelectedDemoId('')
     setUnderstanding(null)
@@ -220,12 +195,6 @@ export function PreDeparturePage() {
       left: direction * Math.max(demoScenarioTrackRef.current.clientWidth * 0.82, 280),
     })
   }
-
-  const recommendedMissing = useMemo(
-    () =>
-      understanding ? getRecommendedMissing(understanding) : [],
-    [understanding],
-  )
 
   const analyze = async () => {
     if (!question.trim()) return
@@ -333,7 +302,6 @@ export function PreDeparturePage() {
                   key={scenario.id}
                   onClick={() => {
                     setSelectedDemoId(scenario.id)
-                    setRecordingBatchId(null)
                     setQuestion(language === 'ja-JP' ? scenario.questionJa : scenario.questionZh)
                     setUnderstanding(null)
                     setDiagnosis(null)
@@ -357,7 +325,6 @@ export function PreDeparturePage() {
           value={question}
           onChange={(event) => {
             setQuestion(event.target.value)
-            setRecordingBatchId(null)
             setSelectedDemoId('')
             setUnderstanding(null)
             setDiagnosis(null)
@@ -393,7 +360,7 @@ export function PreDeparturePage() {
       {understanding ? (
         <UnderstandingPanel
           diagnosisReady={Boolean(diagnosis)}
-          onStart={() => requestDiagnosis(understanding)}
+          onStart={() => void startDiagnosis(understanding)}
           understanding={understanding}
         />
       ) : (
@@ -421,20 +388,6 @@ export function PreDeparturePage() {
       )}
 
       {isDiagnosing && <AnalysisOverlay />}
-      {showRecommendedConfirm && understanding && (
-        <RecommendedConfirm
-          fields={recommendedMissing}
-          onCancel={() => {
-            if (!recordingBatchId) {
-              setShowRecommendedConfirm(false)
-              return
-            }
-            window.history.pushState({ recordingBatchId, focusRecordingEditor: true }, '', '/recordings')
-            window.dispatchEvent(new PopStateEvent('popstate'))
-          }}
-          onContinue={() => void startDiagnosis(understanding, true)}
-        />
-      )}
       {selectedEvidence && (
         <EvidenceDialog
           evidence={selectedEvidence}
