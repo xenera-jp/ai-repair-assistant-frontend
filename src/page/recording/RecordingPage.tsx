@@ -279,7 +279,7 @@ export function RecordingPage() {
   return (
     <main className="recording-page" data-extraction-visible={showExtractedIssues}>
       <section className="page-heading">
-        <div><span className="eyebrow">RECORDING ANALYSIS</span><h1>{text('录音分析', '録音分析')}</h1></div>
+        <div><span className="eyebrow">RECORDING ANALYSIS</span><h1>{text('音频分析', '音声分析')}</h1></div>
         <p>{text('上传报修录音，核对说话人原文和设备问题后进入诊断。', '録音をアップロードし、話者別の原文と機器情報を確認して診断へ進みます。')}</p>
       </section>
 
@@ -355,6 +355,7 @@ export function RecordingPage() {
           <div className="recording-actions">
             <div className="recording-transfer-notices" aria-live="polite">
               {!hasDeviceModel && <span className="identifier-manual-required-tag">{text('设备型号必填', '機器型式は必須です')}</span>}
+              {hasManualCorrections && <span className="identifier-manual-required-tag">{text('AI 无法确认标准值，请编辑相关项目', 'AIが標準値を特定できません。該当項目を編集してください')}</span>}
               {batch.files.some((file) => file.status === 'FAILED') && <small>{text('失败文件未参与提取。', '失敗したファイルは抽出対象外です。')}</small>}
             </div>
             <button className="primary-button" disabled={(batch.status !== 'READY' && !(batch.status === 'REVIEW_REQUIRED' && !hasManualCorrections)) || !preview || !hasDeviceModel || isApplying} onClick={() => void apply()} type="button">{isApplying ? <LoaderCircle className="spin" size={17}/> : <Send size={17}/>} {text('转送到出发前分析', '出発前分析へ転送')}</button>
