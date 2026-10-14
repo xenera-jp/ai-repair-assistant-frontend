@@ -4,13 +4,28 @@ import { recordingApi } from '../../api'
 import { useLanguage } from '../../i18n'
 import type { ExtractedIssue, RecordingBatch, RecordingEvidence, SpeakerRole, TranscriptSegment } from '../../model'
 import { RealtimePlayback } from './RealtimePlayback'
+import { STORAGE_KEYS } from '../../common/constant/storage'
+import { readWorkspace, writeWorkspace } from '../../common/storage/workspace-storage'
+import { HttpRequestError } from '../../api/client'
+
+interface RecordingDraft {
+  batch: RecordingBatch | null
+  activeFileId: string
+  editing: { id: string; value: string } | null
+  dismissedIssueTypes: string[]
+  currentTimeMs: number
+  pendingFileName: string | null
+}
 
 const terminal = new Set(['PREPARED', 'TRANSCRIBED', 'PARTIAL_SUCCESS', 'REVIEW_REQUIRED', 'READY', 'EXTRACTION_FAILED', 'DIARIZATION_FAILED', 'FAILED'])
 const roleValues: SpeakerRole[] = ['UNKNOWN', 'CUSTOMER_SERVICE', 'CUSTOMER', 'FIELD_ENGINEER', 'OTHER']
 const issueOrder = ['MODEL', 'SYMPTOM', 'ERROR_CODE', 'OPERATING_STATUS', 'OCCURRENCE', 'MEASUREMENT', 'ENVIRONMENT', 'RECENT_CHANGES', 'PHOTO_EVIDENCE']
 
-export function RecordingPage() {
+export function RecordingPage({ active = true }: { active?: boolean }) {
   const { language, text } = useLanguage()
+  const [restored] = useState(() => readWorkspace<RecordingDraft>(STORAGE_KEYS.recordingWorkspace))
+  const recoveryText = useRef(text)
+  const restoredPosition = useRef(restored?.currentTimeMs ?? 0)
   const inputRef = useRef<HTMLInputElement>(null)
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({})
   const transcriptSegmentRefs = useRef<Record<string, HTMLElement | null>>({})
@@ -22,19 +37,52 @@ export function RecordingPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [localRecording, setLocalRecording] = useState<{ id: string; file: File; url: string } | null>(null)
   const localRecordingRef = useRef<typeof localRecording>(null)
-  const [batch, setBatch] = useState<RecordingBatch | null>(null)
-  const [activeFileId, setActiveFileId] = useState('')
+  const [batch, setBatch] = useState<RecordingBatch | null>(restored?.batch ?? null)
+  const [activeFileId, setActiveFileId] = useState(restored?.activeFileId ?? '')
   const [isUploading, setIsUploading] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
-  const [editing, setEditing] = useState<{ id: string; value: string } | null>(null)
-  const [dismissedIssueTypes, setDismissedIssueTypes] = useState<string[]>([])
+  const [editing, setEditing] = useState<{ id: string; value: string } | null>(restored?.editing ?? null)
+  const [dismissedIssueTypes, setDismissedIssueTypes] = useState<string[]>(restored?.dismissedIssueTypes ?? [])
   const [evidenceIssue, setEvidenceIssue] = useState<ExtractedIssue | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => restored?.pendingFileName
+    ? text(`音频「${restored.pendingFileName}」上传尚未完成，请重新选择文件。`, `音声「${restored.pendingFileName}」のアップロードが未完了です。ファイルを再選択してください。`) : null)
   const [streamDrafts, setStreamDrafts] = useState<Record<string, string>>({})
   const [playbackState, setPlaybackState] = useState<'NOT_READY' | 'READY' | 'PLAYING' | 'PAUSED' | 'ENDED'>('NOT_READY')
-  const [currentTimeMs, setCurrentTimeMs] = useState(0)
+  const [currentTimeMs, setCurrentTimeMs] = useState(restored?.currentTimeMs ?? 0)
+  useEffect(() => {
+    writeWorkspace(STORAGE_KEYS.recordingWorkspace, {
+      batch, activeFileId, editing, dismissedIssueTypes, currentTimeMs,
+      pendingFileName: pendingFile?.name ?? null,
+    } satisfies RecordingDraft)
+  }, [batch, activeFileId, editing, dismissedIssueTypes, currentTimeMs, pendingFile])
+
+  useEffect(() => {
+    const batchId = restored?.batch?.id
+    const text = recoveryText.current
+    if (!batchId) return
+    const version = operationVersion.current
+    let cancelled = false
+    void recordingApi.getBatch(batchId).then((next) => {
+      if (cancelled || version !== operationVersion.current) return
+      setBatch((current) => current?.id === batchId ? next : current)
+    }).catch((reason) => {
+      if (!cancelled && version === operationVersion.current) {
+        if (reason instanceof HttpRequestError && reason.status === 404) {
+          setBatch(null); setActiveFileId(''); setEditing(null); setDismissedIssueTypes([])
+          restoredPosition.current = 0; setCurrentTimeMs(0)
+        }
+        setError(message(reason, text))
+      }
+    })
+    return () => { cancelled = true }
+  }, [restored])
   const pollingBatchId = batch?.id
   const pollingStatus = batch?.status
+  useEffect(() => {
+    if (active) return
+    realtimePlayback.current?.pause()
+    Object.values(audioRefs.current).forEach((audio) => audio?.pause())
+  }, [active])
   useEffect(() => {
     if (pollingStatus === 'DIARIZATION_FAILED') realtimePlayback.current?.pause()
   }, [pollingStatus])
@@ -48,6 +96,7 @@ export function RecordingPage() {
   }, [])
 
   useEffect(() => {
+    if (!active) return
     const historyState = window.history.state as { recordingBatchId?: unknown; focusRecordingEditor?: unknown } | null
     const batchId = typeof historyState?.recordingBatchId === 'string' ? historyState.recordingBatchId : null
     const focusRecordingEditor = historyState?.focusRecordingEditor === true
@@ -62,7 +111,7 @@ export function RecordingPage() {
         }))
       }
     }).catch((reason) => setError(message(reason, text)))
-  }, [text])
+  }, [active, text])
 
   useEffect(() => {
     if (!pollingBatchId || !pollingStatus || terminal.has(pollingStatus)) return
@@ -116,9 +165,9 @@ export function RecordingPage() {
 
   const activeFile = batch?.files.find((file) => file.id === activeFileId) ?? batch?.files[0]
   const displayedSegments = useMemo(() => {
-    const sorted = [...(activeFile?.segments ?? [])].sort((a, b) => a.startMs - b.startMs)
+    const sorted = [...(activeFile?.segments ?? [])].sort((a, b) => activeFile?.realtime ? a.sequenceNo - b.sequenceNo : a.startMs - b.startMs)
     return groupConsecutiveSpeakerSegments(sorted)
-  }, [activeFile?.segments])
+  }, [activeFile?.segments, activeFile?.realtime])
   const activeSegmentId = useMemo(() => displayedSegments.find((segment) => segment.startMs <= currentTimeMs && currentTimeMs < segment.endMs)?.id ?? '', [displayedSegments, currentTimeMs])
   const playbackSegmentId = activeSegmentId || displayedSegments.find((segment) => segment.endMs > currentTimeMs)?.id || ''
   const activeDrafts = activeFile ? Object.entries(streamDrafts).filter(([key]) => key.startsWith(`${activeFile.id}:`)).map(([, value]) => value).filter(Boolean) : []
@@ -138,16 +187,18 @@ export function RecordingPage() {
   const issueGroups = useMemo(() => issueOrder.filter((type) => !dismissedIssueTypes.includes(type)).map((type) => ({ type, issues: (batch?.issues ?? []).filter((issue) => canonicalIssueType(issue.type) === type) })), [batch?.issues, dismissedIssueTypes])
 
   useEffect(() => {
-    if (playbackState !== 'PLAYING' || !playbackSegmentId) return
+    if (!active || playbackState !== 'PLAYING' || !playbackSegmentId) return
     transcriptSegmentRefs.current[playbackSegmentId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [playbackSegmentId, playbackState])
+  }, [active, playbackSegmentId, playbackState])
 
   const resetRecording = () => {
+    restoredPosition.current = 0
     realtimePlayback.current?.dispose(true); realtimePlayback.current = null
     Object.values(audioRefs.current).forEach((audio) => audio?.pause())
     if (localRecordingRef.current) URL.revokeObjectURL(localRecordingRef.current.url)
     localRecordingRef.current = null; setLocalRecording(null)
     setBatch(null); setActiveFileId(''); setPendingFile(null); setStreamDrafts({})
+    setEditing(null); setDismissedIssueTypes([]); setEvidenceIssue(null); setError(null)
     transcriptSegmentRefs.current = {}
     setPlaybackState('NOT_READY'); setCurrentTimeMs(0)
     if (inputRef.current) inputRef.current.value = ''
@@ -262,7 +313,8 @@ export function RecordingPage() {
       }
       window.history.pushState({ recordingProblemDescription: preview, recordingBatchId: batch.id }, '', '/pre-departure')
       window.dispatchEvent(new PopStateEvent('popstate'))
-    } catch (reason) { setError(message(reason, text)); setIsApplying(false) }
+    } catch (reason) { setError(message(reason, text)) }
+    finally { setIsApplying(false) }
   }
 
   const playEvidence = (evidence: RecordingEvidence) => {
@@ -300,7 +352,7 @@ export function RecordingPage() {
           <div className="section-title"><FileAudio size={19}/><div><h2>{text('录音文件', '録音ファイル')}</h2><p>{statusText(batch.status, text)} · {batch.files.length} {text('个文件', 'ファイル')}</p></div></div>
           <div className="recording-file-list">{batch.files.map((file) => <div className="recording-file" key={file.id}>
             <div className="recording-file-meta"><strong>{file.name}</strong><div className="recording-file-details"><span>{formatBytes(file.sizeBytes)}</span><span aria-live="polite" className={`recording-file-status${file.status === 'TRANSCRIBING' ? ' transcribing' : ''}`} role="status">{file.status === 'TRANSCRIBING' && <LoaderCircle className="spin" size={15} aria-hidden="true"/>}{fileStatus(file.status, text)}</span></div>{file.errorMessage && <small>{file.errorMessage}</small>}</div>
-            <div className="recording-audio-controls"><div className="recording-player"><audio crossOrigin="anonymous" controls={!file.realtime || file.status === 'COMPLETED'} preload="metadata" ref={(node) => { audioRefs.current[file.id] = node }} src={localRecording?.id === file.id ? localRecording.url : recordingApi.audioUrl(file.id)} onLoadedMetadata={() => setPlaybackState('READY')} onPlay={() => setPlaybackState('PLAYING')} onPause={() => { setPlaybackState((current) => current === 'ENDED' ? current : 'PAUSED') }} onEnded={() => { if (!file.realtime || file.status === 'COMPLETED') setPlaybackState('ENDED'); else void endPlayback() }} onTimeUpdate={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))} onSeeked={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))}/>{file.realtime && file.status !== 'COMPLETED' && <span aria-live="off">{formatTime(currentTimeMs)}</span>}{(!file.realtime || file.status === 'COMPLETED') && <RecordingVolume getAudio={() => audioRefs.current[file.id]} label={text('音量', '音量')}/>}</div><button aria-label={text('删除录音', '録音を削除')} className="recording-delete-button" onClick={() => void deleteRecording()} title={text('删除', '削除')} type="button"><Trash2 size={16}/></button></div>
+            <div className="recording-audio-controls"><div className="recording-player"><audio crossOrigin="anonymous" controls={!file.realtime || file.status === 'COMPLETED'} preload="metadata" ref={(node) => { audioRefs.current[file.id] = node }} src={localRecording?.id === file.id ? localRecording.url : recordingApi.audioUrl(file.id)} onLoadedMetadata={(event) => { if (file.id === activeFileId && restoredPosition.current > 0) { event.currentTarget.currentTime = Math.min(restoredPosition.current / 1000, Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : restoredPosition.current / 1000); restoredPosition.current = 0 }; setPlaybackState('READY') }} onPlay={() => setPlaybackState('PLAYING')} onPause={() => { setPlaybackState((current) => current === 'ENDED' ? current : 'PAUSED') }} onEnded={() => { if (!file.realtime || file.status === 'COMPLETED') setPlaybackState('ENDED'); else void endPlayback() }} onTimeUpdate={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))} onSeeked={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))}/>{file.realtime && file.status !== 'COMPLETED' && <span aria-live="off">{formatTime(currentTimeMs)}</span>}{(!file.realtime || file.status === 'COMPLETED') && <RecordingVolume getAudio={() => audioRefs.current[file.id]} label={text('音量', '音量')}/>}</div><button aria-label={text('删除录音', '録音を削除')} className="recording-delete-button" onClick={() => void deleteRecording()} title={text('删除', '削除')} type="button"><Trash2 size={16}/></button></div>
             <div className="recording-file-actions">
               {(file.realtime ? file.status === 'PREPARED' : playbackState !== 'PLAYING') && <button className="primary-button" disabled={playbackState === 'NOT_READY' || isStartingRealtime} onClick={() => void togglePlayback()} type="button">{isStartingRealtime ? <LoaderCircle className="spin" size={15}/> : <Play size={15}/>} {isStartingRealtime ? text('正在连接', '接続中') : text('开始播放', '再生開始')}</button>}
               {file.realtime && realtimePlayback.current && playbackState !== 'ENDED' && ['REALTIME_TRANSCRIBING', 'DIARIZATION_FAILED'].includes(file.status) && <button className="primary-button" onClick={() => void endPlayback()} type="button"><Square size={15}/>{text('结束', '終了')}</button>}

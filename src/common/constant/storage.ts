@@ -3,4 +3,6 @@ export const STORAGE_KEYS = {
   activeDiagnosisSessionId: 'activeDiagnosisSessionId',
   language: 'repair-assistant-language',
   theme: 'repair-assistant-theme',
+  recordingWorkspace: 'repair-assistant-recording-workspace-v1',
+  preDepartureWorkspace: 'repair-assistant-pre-departure-workspace-v1',
 } as const

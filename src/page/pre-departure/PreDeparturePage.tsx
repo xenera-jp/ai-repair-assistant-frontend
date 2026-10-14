@@ -2,7 +2,10 @@ import { BrainCircuit, ChevronRight, ChevronsLeft, ChevronsRight, Database, Load
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { navigate } from '../../common/hook/useAppRoute'
-import { setActiveDiagnosisSessionId } from '../../common/storage/diagnosis-session-storage'
+import { clearActiveDiagnosisSessionId, setActiveDiagnosisSessionId } from '../../common/storage/diagnosis-session-storage'
+import { STORAGE_KEYS } from '../../common/constant/storage'
+import { readWorkspace, writeWorkspace } from '../../common/storage/workspace-storage'
+import { HttpRequestError } from '../../api/client'
 
 // 演示用报障文本，便于快速体验问题理解和出发前诊断流程。
 const demoScenarios = [
@@ -101,32 +104,75 @@ import { DiagnosisResults } from '../../component/diagnosis/DiagnosisResults'
 import { EvidenceDialog } from '../../component/evidence/EvidenceDialog'
 
 /** 出发前工作台：输入报障、确认字段完整性并发起初步诊断。 */
-export function PreDeparturePage() {
+interface PreDepartureDraft {
+  question: string
+  selectedDemoId: string
+  understanding: ProblemUnderstanding | null
+  diagnosis: DiagnosisSession | null
+  savedReportId: string | null
+  interrupted: boolean
+}
+
+export function PreDeparturePage({ active = true }: { active?: boolean }) {
   const { language, text } = useLanguage()
-  const [selectedDemoId, setSelectedDemoId] = useState<string>('standard')
+  const [restored] = useState(() => readWorkspace<PreDepartureDraft>(STORAGE_KEYS.preDepartureWorkspace))
+  const recoveryText = useRef(text)
+  const [selectedDemoId, setSelectedDemoId] = useState<string>(restored?.selectedDemoId ?? 'standard')
   const [question, setQuestion] = useState<string>(() =>
-    language === 'ja-JP'
+    restored?.question ?? (language === 'ja-JP'
       ? demoScenarios[0].questionJa
-      : demoScenarios[0].questionZh,
+      : demoScenarios[0].questionZh),
   )
   const [understanding, setUnderstanding] =
-    useState<ProblemUnderstanding | null>(null)
-  const [diagnosis, setDiagnosis] = useState<DiagnosisSession | null>(null)
+    useState<ProblemUnderstanding | null>(restored?.understanding ?? null)
+  const [diagnosis, setDiagnosis] = useState<DiagnosisSession | null>(restored?.diagnosis ?? null)
   const [isUnderstanding, setIsUnderstanding] = useState(false)
   const [isDiagnosing, setIsDiagnosing] = useState(false)
   const [selectedEvidence, setSelectedEvidence] =
     useState<EvidenceItem | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(() => restored?.interrupted
+    ? text('刷新中断了当前请求，输入已保留，请重新执行分析。', '再読み込みでリクエストが中断されました。入力は保持されています。分析を再実行してください。') : null)
   const [isSavingReport, setIsSavingReport] = useState(false)
-  const [savedReportId, setSavedReportId] = useState<string | null>(null)
+  const [savedReportId, setSavedReportId] = useState<string | null>(restored?.savedReportId ?? null)
+  const inputVersion = useRef(0)
   const demoScenarioTrackRef = useRef<HTMLDivElement>(null)
   const [canScrollDemoLeft, setCanScrollDemoLeft] = useState(false)
   const [canScrollDemoRight, setCanScrollDemoRight] = useState(true)
+  useEffect(() => {
+    writeWorkspace(STORAGE_KEYS.preDepartureWorkspace, {
+      question, selectedDemoId, understanding, diagnosis, savedReportId,
+      interrupted: isUnderstanding || isDiagnosing || isSavingReport,
+    } satisfies PreDepartureDraft)
+  }, [question, selectedDemoId, understanding, diagnosis, savedReportId, isUnderstanding, isDiagnosing, isSavingReport])
+
+  useEffect(() => {
+    const sessionId = restored?.diagnosis?.id
+    const text = recoveryText.current
+    if (!sessionId) return
+    const version = inputVersion.current
+    let cancelled = false
+    void api.getDiagnosis(sessionId).then((next) => {
+      if (!cancelled && version === inputVersion.current) setDiagnosis(next)
+    }).catch((reason) => {
+      if (!cancelled && version === inputVersion.current) {
+        if (reason instanceof HttpRequestError && reason.status === 404) {
+          setDiagnosis(null)
+          setSavedReportId(null)
+          clearActiveDiagnosisSessionId()
+          setErrorMessage(text('原诊断会话已失效，输入已保留，请重新分析。', '以前の診断セッションは無効です。入力は保持されています。再分析してください。'))
+        } else {
+          setErrorMessage(text('暂时无法核实诊断状态，正在显示刷新前保存的结果。', '診断状態を確認できません。再読み込み前の保存結果を表示しています。'))
+        }
+      }
+    })
+    return () => { cancelled = true }
+  }, [restored])
 
   const startDiagnosis = useCallback(async (
     currentUnderstanding: ProblemUnderstanding,
   ) => {
     if (!currentUnderstanding.readyForAnalysis) return
+    const version = inputVersion.current
     setIsDiagnosing(true)
     setErrorMessage(null)
 
@@ -138,38 +184,51 @@ export function PreDeparturePage() {
         }),
         new Promise((resolve) => window.setTimeout(resolve, 2800)),
       ])
+      if (version !== inputVersion.current) return
       setDiagnosis(result)
       setActiveDiagnosisSessionId(result.id)
       window.setTimeout(() => {
-        document
-          .getElementById('diagnosis-result')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        const resultElement = document.getElementById('diagnosis-result')
+        if (version === inputVersion.current && resultElement?.getClientRects().length) {
+          resultElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
       }, 80)
     } catch (error) {
+      if (version !== inputVersion.current) return
       setErrorMessage(
         error instanceof Error
           ? error.message
           : text('AI 诊断失败，请稍后重试。', 'AI診断に失敗しました。再試行してください。'),
       )
     } finally {
-      setIsDiagnosing(false)
+      if (version === inputVersion.current) setIsDiagnosing(false)
     }
   }, [text])
 
   useEffect(() => {
+    if (!active) return
     const historyState = window.history.state as { recordingProblemDescription?: unknown; recordingBatchId?: unknown } | null
     const problemDescription = typeof historyState?.recordingProblemDescription === 'string'
       ? historyState.recordingProblemDescription
       : null
     if (!problemDescription) return
+    inputVersion.current += 1
+    setIsUnderstanding(false)
+    setIsDiagnosing(false)
+    setIsSavingReport(false)
     setQuestion(problemDescription)
     setSelectedDemoId('')
     setUnderstanding(null)
     setDiagnosis(null)
+    setSelectedEvidence(null)
+    setSavedReportId(null)
+    setErrorMessage(null)
+    clearActiveDiagnosisSessionId()
     window.history.replaceState({}, '', window.location.pathname)
-  }, [])
+  }, [active])
 
   useEffect(() => {
+    if (!active) return
     const track = demoScenarioTrackRef.current
     if (!track) return
 
@@ -187,7 +246,7 @@ export function PreDeparturePage() {
       track.removeEventListener('scroll', updateScrollControls)
       resizeObserver.disconnect()
     }
-  }, [])
+  }, [active, language])
 
   const scrollDemoScenarios = (direction: -1 | 1) => {
     demoScenarioTrackRef.current?.scrollBy({
@@ -198,6 +257,7 @@ export function PreDeparturePage() {
 
   const analyze = async () => {
     if (!question.trim()) return
+    const version = ++inputVersion.current
     setIsUnderstanding(true)
     setErrorMessage(null)
     setDiagnosis(null)
@@ -208,33 +268,38 @@ export function PreDeparturePage() {
         language,
         originalText: question,
       })
+      if (version !== inputVersion.current) return
       setUnderstanding(result)
     } catch (error) {
+      if (version !== inputVersion.current) return
       setErrorMessage(
         error instanceof Error
           ? error.message
           : text('问题理解失败，请稍后重试。', '問題理解に失敗しました。再試行してください。'),
       )
     } finally {
-      setIsUnderstanding(false)
+      if (version === inputVersion.current) setIsUnderstanding(false)
     }
   }
 
   const saveCurrentReport = async () => {
     if (!diagnosis) return
+    const version = inputVersion.current
     setIsSavingReport(true)
     setErrorMessage(null)
     try {
       const report = await api.saveReport(diagnosis.id)
+      if (version !== inputVersion.current) return
       setSavedReportId(report.id)
     } catch (error) {
+      if (version !== inputVersion.current) return
       setErrorMessage(
         error instanceof Error
           ? error.message
           : text('报告保存失败，请稍后重试。', 'レポートの保存に失敗しました。'),
       )
     } finally {
-      setIsSavingReport(false)
+      if (version === inputVersion.current) setIsSavingReport(false)
     }
   }
 
@@ -302,6 +367,7 @@ export function PreDeparturePage() {
                   key={scenario.id}
                   onClick={() => {
                     setSelectedDemoId(scenario.id)
+                    inputVersion.current += 1
                     setQuestion(language === 'ja-JP' ? scenario.questionJa : scenario.questionZh)
                     setUnderstanding(null)
                     setDiagnosis(null)
@@ -324,6 +390,7 @@ export function PreDeparturePage() {
           maxLength={4000}
           value={question}
           onChange={(event) => {
+            inputVersion.current += 1
             setQuestion(event.target.value)
             setSelectedDemoId('')
             setUnderstanding(null)
