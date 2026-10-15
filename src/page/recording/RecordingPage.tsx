@@ -4,11 +4,14 @@ import { recordingApi } from '../../api'
 import { useLanguage } from '../../i18n'
 import type { ExtractedIssue, RecordingBatch, RecordingEvidence, SpeakerRole, TranscriptSegment } from '../../model'
 import { RealtimePlayback } from './RealtimePlayback'
+import { MossPlayback } from './MossPlayback'
 import { STORAGE_KEYS } from '../../common/constant/storage'
 import { readWorkspace, writeWorkspace } from '../../common/storage/workspace-storage'
 import { HttpRequestError } from '../../api/client'
 
 interface RecordingDraft {
+  transcriptionProvider?: 'openai' | 'moss'
+  mossEndedAt?: { fileId: string; positionMs: number } | null
   batch: RecordingBatch | null
   activeFileId: string
   editing: { id: string; value: string } | null
@@ -31,8 +34,10 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
   const transcriptSegmentRefs = useRef<Record<string, HTMLElement | null>>({})
   const uploadController = useRef<AbortController | null>(null)
   const operationVersion = useRef(0)
-  const realtimePlayback = useRef<RealtimePlayback | null>(null)
+  const realtimePlayback = useRef<RealtimePlayback | MossPlayback | null>(null)
   const [isStartingRealtime, setIsStartingRealtime] = useState(false)
+  const [transcriptionProvider, setTranscriptionProvider] = useState<'openai' | 'moss'>(restored?.transcriptionProvider === 'moss' ? 'moss' : 'openai')
+  const [mossEndedAt, setMossEndedAt] = useState(restored?.mossEndedAt ?? null)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [localRecording, setLocalRecording] = useState<{ id: string; file: File; url: string } | null>(null)
@@ -51,10 +56,10 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
   const [currentTimeMs, setCurrentTimeMs] = useState(restored?.currentTimeMs ?? 0)
   useEffect(() => {
     writeWorkspace(STORAGE_KEYS.recordingWorkspace, {
-      batch, activeFileId, editing, dismissedIssueTypes, currentTimeMs,
+      batch, activeFileId, editing, dismissedIssueTypes, currentTimeMs, transcriptionProvider, mossEndedAt,
       pendingFileName: pendingFile?.name ?? null,
     } satisfies RecordingDraft)
-  }, [batch, activeFileId, editing, dismissedIssueTypes, currentTimeMs, pendingFile])
+  }, [batch, activeFileId, editing, dismissedIssueTypes, currentTimeMs, pendingFile, transcriptionProvider, mossEndedAt])
 
   useEffect(() => {
     const batchId = restored?.batch?.id
@@ -164,13 +169,20 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
   }, [pollingBatchId, pollingStatus, activeFileId])
 
   const activeFile = batch?.files.find((file) => file.id === activeFileId) ?? batch?.files[0]
+  const isMossPlayback = activeFile?.mossPlayback != null || (activeFile?.status === 'PREPARED' && transcriptionProvider === 'moss') || realtimePlayback.current instanceof MossPlayback
+  const mossCutoff = mossEndedAt?.fileId === activeFile?.id ? mossEndedAt?.positionMs : activeFile?.mossPlayback?.ended ? activeFile.mossPlayback.positionMs : undefined
+  // Ending freezes transcript visibility; replay only moves the highlight within that fixed range.
+  const visibleUntil = isMossPlayback ? mossCutoff ?? currentTimeMs : Number.POSITIVE_INFINITY
   const displayedSegments = useMemo(() => {
-    const sorted = [...(activeFile?.segments ?? [])].sort((a, b) => activeFile?.realtime ? a.sequenceNo - b.sequenceNo : a.startMs - b.startMs)
+    const sorted = [...(activeFile?.segments ?? [])].filter((segment) => !isMossPlayback || segment.endMs <= visibleUntil).sort((a, b) => activeFile?.realtime ? a.sequenceNo - b.sequenceNo : a.startMs - b.startMs)
     return groupConsecutiveSpeakerSegments(sorted)
-  }, [activeFile?.segments, activeFile?.realtime])
+  }, [activeFile?.segments, activeFile?.realtime, isMossPlayback, visibleUntil])
+  useEffect(() => {
+    if (activeFile?.mossPlayback?.ended) setPlaybackState('ENDED')
+  }, [activeFile?.id, activeFile?.mossPlayback?.ended])
   const activeSegmentId = useMemo(() => displayedSegments.find((segment) => segment.startMs <= currentTimeMs && currentTimeMs < segment.endMs)?.id ?? '', [displayedSegments, currentTimeMs])
   const playbackSegmentId = activeSegmentId || displayedSegments.find((segment) => segment.endMs > currentTimeMs)?.id || ''
-  const activeDrafts = activeFile ? Object.entries(streamDrafts).filter(([key]) => key.startsWith(`${activeFile.id}:`)).map(([, value]) => value).filter(Boolean) : []
+  const activeDrafts = activeFile && !isMossPlayback ? Object.entries(streamDrafts).filter(([key]) => key.startsWith(`${activeFile.id}:`)).map(([, value]) => value).filter(Boolean) : []
   const isTranscribing = batch != null && batch.files.some((file) => ['UPLOADED', 'TRANSCRIBING', 'REALTIME_TRANSCRIBING', 'DIARIZATION_FAILED'].includes(file.status))
   const isExtracting = batch?.status === 'EXTRACTING'
   const canSummarize = batch != null && ['TRANSCRIBED', 'PARTIAL_SUCCESS'].includes(batch.status) && batch.files.some((file) => file.status === 'COMPLETED' && file.segments.length > 0)
@@ -200,7 +212,7 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
     setBatch(null); setActiveFileId(''); setPendingFile(null); setStreamDrafts({})
     setEditing(null); setDismissedIssueTypes([]); setEvidenceIssue(null); setError(null)
     transcriptSegmentRefs.current = {}
-    setPlaybackState('NOT_READY'); setCurrentTimeMs(0)
+    setPlaybackState('NOT_READY'); setCurrentTimeMs(0); setMossEndedAt(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -262,16 +274,18 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
     const audio = audioRefs.current[activeFile.id]
     if (!audio) return
     if (activeFile.realtime) {
-      if (isStartingRealtime || playbackState === 'ENDED') return
+      if (isStartingRealtime || playbackState === 'ENDED' || activeFile.mossPlayback?.ended) return
       if (realtimePlayback.current) {
         try { await realtimePlayback.current.resume() } catch (reason) { setError(message(reason, text)) }
         return
       }
       setIsStartingRealtime(true); setError(null); setStreamDrafts({}); setPlaybackState('READY')
-      const engine = new RealtimePlayback(audio, activeFile.id,
-        (next) => setBatch((current) => current?.id === next.id ? next : current),
-        (detail) => { setError(message(new Error(detail), text)); setPlaybackState('PAUSED') },
-        () => {}, localRecording?.id === activeFile.id ? localRecording.file : undefined)
+      const onBatch = (next: RecordingBatch) => setBatch((current) => current?.id === next.id ? next : current)
+      const onError = (detail: string) => { setError(message(new Error(detail), text)); setPlaybackState('PAUSED') }
+      const engine = isMossPlayback
+        ? new MossPlayback(audio, activeFile.id, onBatch, onError)
+        : new RealtimePlayback(audio, activeFile.id, onBatch, onError,
+          () => {}, localRecording?.id === activeFile.id ? localRecording.file : undefined)
       realtimePlayback.current = engine
       try { await engine.start() } catch (reason) { engine.dispose(); realtimePlayback.current = null; setError(message(reason, text)) }
       finally { setIsStartingRealtime(false) }
@@ -288,7 +302,12 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
     const audio = audioRefs.current[activeFile.id]
     audio?.pause()
     setPlaybackState('ENDED')
-    if (activeFile.realtime) await realtimePlayback.current?.finish()
+    if (isMossPlayback) {
+      const cutoff = mossEndedAt?.fileId === activeFile.id ? mossEndedAt.positionMs : Math.floor((audio?.currentTime ?? currentTimeMs / 1000) * 1000)
+      setCurrentTimeMs(cutoff); setMossEndedAt({ fileId: activeFile.id, positionMs: cutoff })
+      if (realtimePlayback.current) await realtimePlayback.current.finish()
+      else await updateBatch(() => recordingApi.finishMoss(activeFile.id, cutoff))
+    } else if (activeFile.realtime) await realtimePlayback.current?.finish()
   }
 
   const updateBatch = async (operation: () => Promise<RecordingBatch>) => {
@@ -352,24 +371,25 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
           <div className="section-title"><FileAudio size={19}/><div><h2>{text('录音文件', '録音ファイル')}</h2><p>{statusText(batch.status, text)} · {batch.files.length} {text('个文件', 'ファイル')}</p></div></div>
           <div className="recording-file-list">{batch.files.map((file) => <div className="recording-file" key={file.id}>
             <div className="recording-file-meta"><strong>{file.name}</strong><div className="recording-file-details"><span>{formatBytes(file.sizeBytes)}</span><span aria-live="polite" className={`recording-file-status${file.status === 'TRANSCRIBING' ? ' transcribing' : ''}`} role="status">{file.status === 'TRANSCRIBING' && <LoaderCircle className="spin" size={15} aria-hidden="true"/>}{fileStatus(file.status, text)}</span></div>{file.errorMessage && <small>{file.errorMessage}</small>}</div>
-            <div className="recording-audio-controls"><div className="recording-player"><audio crossOrigin="anonymous" controls={!file.realtime || file.status === 'COMPLETED'} preload="metadata" ref={(node) => { audioRefs.current[file.id] = node }} src={localRecording?.id === file.id ? localRecording.url : recordingApi.audioUrl(file.id)} onLoadedMetadata={(event) => { if (file.id === activeFileId && restoredPosition.current > 0) { event.currentTarget.currentTime = Math.min(restoredPosition.current / 1000, Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : restoredPosition.current / 1000); restoredPosition.current = 0 }; setPlaybackState('READY') }} onPlay={() => setPlaybackState('PLAYING')} onPause={() => { setPlaybackState((current) => current === 'ENDED' ? current : 'PAUSED') }} onEnded={() => { if (!file.realtime || file.status === 'COMPLETED') setPlaybackState('ENDED'); else void endPlayback() }} onTimeUpdate={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))} onSeeked={(event) => setCurrentTimeMs(Math.round(event.currentTarget.currentTime * 1000))}/>{file.realtime && file.status !== 'COMPLETED' && <span aria-live="off">{formatTime(currentTimeMs)}</span>}{(!file.realtime || file.status === 'COMPLETED') && <RecordingVolume getAudio={() => audioRefs.current[file.id]} label={text('音量', '音量')}/>}</div><button aria-label={text('删除录音', '録音を削除')} className="recording-delete-button" onClick={() => void deleteRecording()} title={text('删除', '削除')} type="button"><Trash2 size={16}/></button></div>
+            <div className="recording-audio-controls"><div className="recording-player"><audio crossOrigin="anonymous" controls={!file.realtime || file.status === 'COMPLETED'} preload="metadata" ref={(node) => { audioRefs.current[file.id] = node }} src={localRecording?.id === file.id ? localRecording.url : recordingApi.audioUrl(file.id)} onLoadedMetadata={(event) => { if (file.id === activeFileId && (restoredPosition.current > 0 || file.mossPlayback?.ended)) { event.currentTarget.currentTime = Math.min((restoredPosition.current || file.mossPlayback?.positionMs || 0) / 1000, Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : (restoredPosition.current || file.mossPlayback?.positionMs || 0) / 1000); if (file.mossPlayback) setCurrentTimeMs(Math.floor(event.currentTarget.currentTime * 1000)); restoredPosition.current = 0 }; setPlaybackState(file.mossPlayback?.ended ? 'ENDED' : 'READY') }} onPlay={() => setPlaybackState('PLAYING')} onPause={() => { setPlaybackState((current) => current === 'ENDED' ? current : 'PAUSED') }} onEnded={() => { if (!file.realtime || file.status === 'COMPLETED') setPlaybackState('ENDED'); else void endPlayback() }} onTimeUpdate={(event) => setCurrentTimeMs(file.mossPlayback ? Math.floor(event.currentTarget.currentTime * 1000) : Math.round(event.currentTarget.currentTime * 1000))} onSeeked={(event) => setCurrentTimeMs(file.mossPlayback ? Math.floor(event.currentTarget.currentTime * 1000) : Math.round(event.currentTarget.currentTime * 1000))}/>{file.realtime && file.status !== 'COMPLETED' && <span aria-live="off">{formatTime(currentTimeMs)}</span>}{(!file.realtime || file.status === 'COMPLETED') && <RecordingVolume getAudio={() => audioRefs.current[file.id]} label={text('音量', '音量')}/>}</div><button aria-label={text('删除录音', '録音を削除')} className="recording-delete-button" onClick={() => void deleteRecording()} title={text('删除', '削除')} type="button"><Trash2 size={16}/></button></div>
             <div className="recording-file-actions">
-              {(file.realtime ? file.status === 'PREPARED' : playbackState !== 'PLAYING') && <button className="primary-button" disabled={playbackState === 'NOT_READY' || isStartingRealtime} onClick={() => void togglePlayback()} type="button">{isStartingRealtime ? <LoaderCircle className="spin" size={15}/> : <Play size={15}/>} {isStartingRealtime ? text('正在连接', '接続中') : text('开始播放', '再生開始')}</button>}
-              {file.realtime && realtimePlayback.current && playbackState !== 'ENDED' && ['REALTIME_TRANSCRIBING', 'DIARIZATION_FAILED'].includes(file.status) && <button className="primary-button" onClick={() => void endPlayback()} type="button"><Square size={15}/>{text('结束', '終了')}</button>}
+              {(file.realtime ? (file.status === 'PREPARED' || (file.mossPlayback && !file.mossPlayback.ended && mossCutoff === undefined && playbackState !== 'PLAYING')) : playbackState !== 'PLAYING') && <button className="primary-button" disabled={playbackState === 'NOT_READY' || isStartingRealtime} onClick={() => void togglePlayback()} type="button">{isStartingRealtime ? <LoaderCircle className="spin" size={15}/> : <Play size={15}/>} {isStartingRealtime ? text('正在连接', '接続中') : text('开始播放', '再生開始')}</button>}
+              {file.realtime && (realtimePlayback.current || file.mossPlayback) && !file.mossPlayback?.ended && playbackState !== 'ENDED' && ['REALTIME_TRANSCRIBING', 'DIARIZATION_FAILED'].includes(file.status) && <button className="primary-button" onClick={() => void endPlayback()} type="button"><Square size={15}/>{text('结束', '終了')}</button>}
               {file.status === 'DIARIZATION_FAILED' && <button className="secondary-button" onClick={() => void updateBatch(() => recordingApi.retryDiarization(file.id))} type="button"><RotateCcw size={15}/>{text('重试说话人分离', '話者分離を再試行')}</button>}
+              {file.realtime && <label className="recording-provider"><select aria-label={text('转写模型', '文字起こしモデル')} value={file.mossPlayback ? 'moss' : transcriptionProvider} disabled={file.status !== 'PREPARED' || isStartingRealtime} onChange={(event) => setTranscriptionProvider(event.target.value === 'moss' ? 'moss' : 'openai')}><option value="openai">OpenAI</option><option value="moss">MOSS</option></select></label>}
             </div>
           </div>)}</div>
         </section>
 
         <section className="recording-card transcript-area">
-          <div className="section-title"><Mic2 size={19}/><div><h2>{text('确认对话与即时草稿', '確定会話とリアルタイム下書き')}</h2><p>{activeFile?.realtime ? text('即时文字先显示为草稿；分离后更新确认对话，全部收尾后识别业务角色。', 'リアルタイム表示は下書きです。話者分離後に確定会話を更新し、完了後に役割を判定します。') : text('点击时间可从对应位置播放。', '時間をクリックすると該当位置から再生します。')}</p></div></div>
+          <div className="section-title"><Mic2 size={19}/><div><h2>{text('确认对话与即时草稿', '確定会話とリアルタイム下書き')}</h2><p>{isMossPlayback ? mossCutoff !== undefined ? text('保留结束时间内的全部对话，回放时定位并高亮对应文字。', '終了時点までの会話を保持し、再生位置に合わせて該当箇所を強調表示します。') : text('整段播放完后显示对应文字和说话人，未播放内容不会显示。', '区間の再生完了後に文字と話者を表示し、未再生の内容は表示しません。') : activeFile?.realtime ? text('即时文字先显示为草稿；分离后更新确认对话，全部收尾后识别业务角色。', 'リアルタイム表示は下書きです。話者分離後に確定会話を更新し、完了後に役割を判定します。') : text('点击时间可从对应位置播放。', '時間をクリックすると該当位置から再生します。')}</p></div></div>
           {activeFile && <>
             {activeFile.segments.length > 0 && <div className="speaker-controls">{Array.from(new Set(activeFile.segments.map((segment) => segment.speakerLabel))).filter((speaker) => !activeFile.realtime || ['A', 'B'].includes(speaker)).map((speaker) => {
               const segment = activeFile.segments.find((item) => item.speakerLabel === speaker)!
               return <label key={speaker}><span>{text('说话人', '話者')} {speaker}</span><select disabled={!canSummarize || batch.extractionRevision !== 0 || isSummarizing} value={segment.roleCode ?? 'UNKNOWN'} onChange={(event) => void updateBatch(() => recordingApi.setSpeakerRole(activeFile.id, speaker, event.target.value as SpeakerRole))}>{roleValues.map((role) => <option key={role} value={role}>{roleLabel(role, text)}</option>)}</select></label>
             })}</div>}
             <div className="transcript-segments">{displayedSegments.map((segment) => <article className={segment.id === activeSegmentId && !['NOT_READY', 'READY'].includes(playbackState) ? 'active' : currentTimeMs >= segment.endMs ? 'played' : 'upcoming'} key={segment.id} ref={(node) => { segment.segmentIds.forEach((id) => { transcriptSegmentRefs.current[id] = node }) }}>
-              <button disabled={activeFile.realtime} onClick={() => { const audio = audioRefs.current[activeFile.id]; if (audio) { audio.currentTime = segment.startMs / 1000; void audio.play() } }} type="button"><Play size={12}/>{formatTime(segment.startMs)}–{formatTime(segment.endMs)}</button>
+              <button disabled={activeFile.realtime && !(isMossPlayback && mossCutoff !== undefined)} onClick={() => { const audio = audioRefs.current[activeFile.id]; if (audio) { audio.currentTime = segment.startMs / 1000; void audio.play() } }} type="button"><Play size={12}/>{formatTime(segment.startMs)}–{formatTime(segment.endMs)}</button>
               <div className="recording-speaker-inline"><strong>{segment.roleCode && segment.roleCode !== 'UNKNOWN' ? `${roleLabel(segment.roleCode, text)}（${text('说话人', '話者')} ${segment.speakerLabel}）` : segment.speakerLabel === 'UNKNOWN' ? text('说话人未知', '話者未判定') : segment.speakerLabel === 'MIXED' ? text('A/B 混合，待确认', 'A/B混在・要確認') : `${text('说话人', '話者')} ${segment.speakerLabel}`}</strong>{activeFile.realtime && <label className="recording-segment-speaker" title={text('修正说话人', '話者を修正')}><span className="sr-only">{text('修正', '修正')}</span><select disabled={!canSummarize || batch.extractionRevision !== 0 || isSummarizing} value={segment.speakerLabel} onChange={(event) => void updateBatch(() => recordingApi.setSegmentSpeaker(activeFile.id, segment.id, event.target.value, segment.segmentIds))}><option value="A">A</option><option value="B">B</option><option value="UNKNOWN">{text('未知', '未判定')}</option><option value="MIXED">{text('A/B 混合', 'A/B混在')}</option></select></label>}</div><p>{segment.text}</p>
             </article>)}{activeDrafts.map((draft, index) => <article className="transcript-streaming" key={`stream-${index}`} aria-live="polite">
               <strong>{text('即时草稿 · 说话人待确认', 'リアルタイム下書き・話者確認待ち')}</strong><p>{draft}</p>

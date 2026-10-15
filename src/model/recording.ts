@@ -2,7 +2,7 @@ export type RecordingStatus = 'DIARIZATION_FAILED' | 'UPLOADING' | 'PREPARED' | 
 export type SpeakerRole = 'CUSTOMER_SERVICE' | 'CUSTOMER' | 'FIELD_ENGINEER' | 'OTHER' | 'UNKNOWN'
 
 export interface TranscriptSegment { id: string; sequenceNo: number; speakerLabel: string; roleCode: SpeakerRole | null; roleConfidence: number | null; roleSource: 'MODEL' | 'MANUAL' | 'NONE'; startMs: number; endMs: number; text: string }
-export interface RecordingFile { id: string; name: string; contentType: string; sizeBytes: number; status: string; errorCode: string | null; errorMessage: string | null; segments: TranscriptSegment[]; realtime: boolean }
+export interface RecordingFile { id: string; name: string; contentType: string; sizeBytes: number; status: string; errorCode: string | null; errorMessage: string | null; segments: TranscriptSegment[]; realtime: boolean; mossPlayback?: { positionMs: number; ended: boolean } | null }
 export interface RecordingEvidence { fileId: string; fileName: string; segmentId: string; speakerLabel: string; roleCode: SpeakerRole | null; startMs: number; endMs: number; text: string }
 export interface IdentifierCorrection { status: 'NO_DICTIONARY' | 'RULE_AUTO_CORRECTED' | 'LLM_PENDING_CONFIRMATION' | 'MANUAL_INPUT_REQUIRED' | 'USER_ACCEPTED_LLM' | 'USER_REJECTED_LLM' | 'UNRESOLVED' | 'MANUAL_EDIT'; originalValue: string; suggestedValue: string | null; model: string | null; sourceText: string | null; ruleScore: number | null; reason: string | null; evidenceSegmentIds: string[] }
 export interface ExtractedIssue { id: string; type: string; content: string; originalContent: string; editedByUser: boolean; deleted: boolean; version: number; evidence: RecordingEvidence[]; correction: IdentifierCorrection | null }
