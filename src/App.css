@@ -3297,7 +3297,7 @@ textarea:focus {
 .identifier-correction-dialog .recording-evidence-body article .issue-actions .primary-button { border: 1px solid var(--amber); color: #12151b; background: var(--amber); }
 .identifier-correction-dialog .recording-evidence-body article .issue-actions .secondary-button { border: 1px solid var(--line-strong); color: var(--text-1); background: var(--surface-2); }
 .identifier-correction-dialog .recording-evidence-body b { color: var(--color-primary, #2563eb); }
-.identifier-correction-tag { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border: 1px solid rgba(232, 100, 90, .28); border-radius: 999px; color: #d9574f; background: rgba(232, 100, 90, .1); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.identifier-correction-tag { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border: 1px solid color-mix(in srgb, var(--amber) 28%, transparent); border-radius: 999px; color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .identifier-manual-required-tag { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border: 1px solid rgba(232, 100, 90, .28); border-radius: 999px; color: #d9574f; background: rgba(232, 100, 90, .1); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .identifier-unresolved { display: block; margin-top: 5px; color: #b45309; }
 .manual-correction-field { display: grid; gap: 6px; }
@@ -3336,3 +3336,8 @@ body:has(.recording-page[data-extraction-visible='false']),
 .recording-page[data-extraction-visible='false'] { padding-bottom: 0; }
 .recording-page[data-extraction-visible='false'] .recording-summary-actions { margin-bottom: 0; }
 .recording-page[data-extraction-visible='false'] .recording-extraction-wait { margin-bottom: 0; }
+
+.recording-provider { display: flex; align-items: center; flex-shrink: 0; }
+.recording-provider select { width: 78px; height: 28px; min-height: 0; padding: 2px 4px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-1); color: var(--text-1); color-scheme: inherit; font: inherit; font-size: 12px; }
+
+.recording-provider select option { background: var(--surface-1); color: var(--text-1); }
