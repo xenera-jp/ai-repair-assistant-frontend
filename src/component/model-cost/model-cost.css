@@ -1,0 +1,46 @@
+.page-heading-costs {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+.page-heading-costs > p {
+  max-width: 560px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: right;
+}
+.model-cost-panel {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.model-cost-totals {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.model-cost-totals > span { white-space: nowrap; }
+.model-cost-label { font-weight: 600; }
+.model-cost-totals strong {
+  margin-left: 4px;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.model-cost-notice { color: var(--text-3); font-size: 11px; }
+@media (max-width: 620px) {
+  .page-heading-costs { align-items: flex-start; width: 100%; }
+  .page-heading-costs > p { text-align: left; }
+  .model-cost-panel { align-items: flex-start; }
+  .model-cost-totals { justify-content: flex-start; }
+}

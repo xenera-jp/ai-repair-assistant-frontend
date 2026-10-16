@@ -1,3 +1,5 @@
+import { ModelCostPanel } from '../../component/model-cost/ModelCostPanel'
+import { modelCostScope } from '../../api/model-cost-api'
 import { ArrowRight, CheckCircle2, CircleAlert, LoaderCircle, RotateCcw, TriangleAlert, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
@@ -185,12 +187,15 @@ export function OnsitePage() {
           <span className="eyebrow">ONSITE REFINEMENT</span>
           <h1>{text('现场分析', '現場分析')}</h1>
         </div>
-        <p>
+        <div className="page-heading-costs">
+          <ModelCostPanel scope={modelCostScope(diagnosis?.id)} />
+          <p>
           {text(
             '继承出发前结论，通过一次一个问题继续缩小候选范围。',
             '出発前診断を引き継ぎ、1問ずつ確認して候補を絞り込みます。',
           )}
         </p>
+        </div>
       </section>
 
       {errorMessage && (

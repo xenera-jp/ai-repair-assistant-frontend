@@ -1,3 +1,4 @@
+import { ModelCostHistory } from './component/model-cost/ModelCostHistory'
 import { AppShell } from './common/component/AppShell'
 import { useAppRoute } from './common/hook/useAppRoute'
 import { useEffect, useState } from 'react'
@@ -29,6 +30,7 @@ function App() {
       )}
       {path === '/onsite' && <OnsitePage />}
       {path === '/reports' && <ReportsPage />}
+      <ModelCostHistory />
     </AppShell>
   )
 }

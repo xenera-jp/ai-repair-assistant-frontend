@@ -1,3 +1,4 @@
+import { ModelCostPanel } from '../../component/model-cost/ModelCostPanel'
 import { BrainCircuit, ChevronRight, ChevronsLeft, ChevronsRight, Database, LoaderCircle, Search, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
@@ -105,6 +106,7 @@ import { EvidenceDialog } from '../../component/evidence/EvidenceDialog'
 
 /** 出发前工作台：输入报障、确认字段完整性并发起初步诊断。 */
 interface PreDepartureDraft {
+  costScope?: string
   question: string
   selectedDemoId: string
   understanding: ProblemUnderstanding | null
@@ -116,6 +118,7 @@ interface PreDepartureDraft {
 export function PreDeparturePage({ active = true }: { active?: boolean }) {
   const { language, text } = useLanguage()
   const [restored] = useState(() => readWorkspace<PreDepartureDraft>(STORAGE_KEYS.preDepartureWorkspace))
+  const [costScope, setCostScope] = useState(() => restored?.costScope ?? `analysis_${crypto.randomUUID()}`)
   const recoveryText = useRef(text)
   const [selectedDemoId, setSelectedDemoId] = useState<string>(restored?.selectedDemoId ?? 'standard')
   const [question, setQuestion] = useState<string>(() =>
@@ -140,10 +143,10 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
   const [canScrollDemoRight, setCanScrollDemoRight] = useState(true)
   useEffect(() => {
     writeWorkspace(STORAGE_KEYS.preDepartureWorkspace, {
-      question, selectedDemoId, understanding, diagnosis, savedReportId,
+      question, selectedDemoId, understanding, diagnosis, savedReportId, costScope,
       interrupted: isUnderstanding || isDiagnosing || isSavingReport,
     } satisfies PreDepartureDraft)
-  }, [question, selectedDemoId, understanding, diagnosis, savedReportId, isUnderstanding, isDiagnosing, isSavingReport])
+  }, [question, selectedDemoId, understanding, diagnosis, savedReportId, costScope, isUnderstanding, isDiagnosing, isSavingReport])
 
   useEffect(() => {
     const sessionId = restored?.diagnosis?.id
@@ -181,7 +184,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
         api.startDiagnosis({
           problemUnderstandingId: currentUnderstanding.id,
           continueWithoutRecommendedFields: true,
-        }),
+        }, costScope),
         new Promise((resolve) => window.setTimeout(resolve, 2800)),
       ])
       if (version !== inputVersion.current) return
@@ -203,7 +206,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
     } finally {
       if (version === inputVersion.current) setIsDiagnosing(false)
     }
-  }, [text])
+  }, [text, costScope])
 
   useEffect(() => {
     if (!active) return
@@ -216,6 +219,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
     setIsUnderstanding(false)
     setIsDiagnosing(false)
     setIsSavingReport(false)
+    setCostScope(typeof historyState?.recordingBatchId === 'string' ? historyState.recordingBatchId : `analysis_${crypto.randomUUID()}`)
     setQuestion(problemDescription)
     setSelectedDemoId('')
     setUnderstanding(null)
@@ -267,7 +271,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
         stage: 'PRE_DEPARTURE',
         language,
         originalText: question,
-      })
+      }, costScope)
       if (version !== inputVersion.current) return
       setUnderstanding(result)
     } catch (error) {
@@ -310,12 +314,15 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
           <span className="eyebrow">PRE-DEPARTURE ANALYSIS</span>
           <h1>{text('出发前故障分析', '出発前故障分析')}</h1>
         </div>
-        <p>
+        <div className="page-heading-costs">
+          <ModelCostPanel scope={costScope} active={active} />
+          <p>
           {text(
             '先把现场描述转化为问题模型，再按设备与故障类型组织企业维修知识。',
             '現場の説明を問題モデルに変換し、機器と故障分類に基づいて保守知識を整理します。',
           )}
         </p>
+        </div>
       </section>
 
       <section
@@ -366,6 +373,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
                   className={`demo-scenario-card${selectedDemoId === scenario.id ? ' active' : ''}`}
                   key={scenario.id}
                   onClick={() => {
+                    setCostScope(`analysis_${crypto.randomUUID()}`)
                     setSelectedDemoId(scenario.id)
                     inputVersion.current += 1
                     setQuestion(language === 'ja-JP' ? scenario.questionJa : scenario.questionZh)
