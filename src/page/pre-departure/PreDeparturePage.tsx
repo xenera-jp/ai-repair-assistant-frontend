@@ -1,3 +1,4 @@
+import { createClientId } from '../../common/util/client-id'
 import { ModelCostPanel } from '../../component/model-cost/ModelCostPanel'
 import { BrainCircuit, ChevronRight, ChevronsLeft, ChevronsRight, Database, LoaderCircle, Search, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -118,7 +119,7 @@ interface PreDepartureDraft {
 export function PreDeparturePage({ active = true }: { active?: boolean }) {
   const { language, text } = useLanguage()
   const [restored] = useState(() => readWorkspace<PreDepartureDraft>(STORAGE_KEYS.preDepartureWorkspace))
-  const [costScope, setCostScope] = useState(() => restored?.costScope ?? `analysis_${crypto.randomUUID()}`)
+  const [costScope, setCostScope] = useState(() => restored?.costScope ?? `analysis_${createClientId()}`)
   const recoveryText = useRef(text)
   const [selectedDemoId, setSelectedDemoId] = useState<string>(restored?.selectedDemoId ?? 'standard')
   const [question, setQuestion] = useState<string>(() =>
@@ -219,7 +220,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
     setIsUnderstanding(false)
     setIsDiagnosing(false)
     setIsSavingReport(false)
-    setCostScope(typeof historyState?.recordingBatchId === 'string' ? historyState.recordingBatchId : `analysis_${crypto.randomUUID()}`)
+    setCostScope(typeof historyState?.recordingBatchId === 'string' ? historyState.recordingBatchId : `analysis_${createClientId()}`)
     setQuestion(problemDescription)
     setSelectedDemoId('')
     setUnderstanding(null)
@@ -373,7 +374,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
                   className={`demo-scenario-card${selectedDemoId === scenario.id ? ' active' : ''}`}
                   key={scenario.id}
                   onClick={() => {
-                    setCostScope(`analysis_${crypto.randomUUID()}`)
+                    setCostScope(`analysis_${createClientId()}`)
                     setSelectedDemoId(scenario.id)
                     inputVersion.current += 1
                     setQuestion(language === 'ja-JP' ? scenario.questionJa : scenario.questionZh)
