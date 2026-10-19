@@ -1,4 +1,5 @@
 import { ModelCostHistory } from './component/model-cost/ModelCostHistory'
+import { SHOW_MODEL_COSTS } from './component/model-cost/visibility'
 import { AppShell } from './common/component/AppShell'
 import { useAppRoute } from './common/hook/useAppRoute'
 import { useEffect, useState } from 'react'
@@ -30,7 +31,7 @@ function App() {
       )}
       {path === '/onsite' && <OnsitePage />}
       {path === '/reports' && <ReportsPage />}
-      <ModelCostHistory />
+      {SHOW_MODEL_COSTS && <ModelCostHistory />}
     </AppShell>
   )
 }

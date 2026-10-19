@@ -1,5 +1,6 @@
 import { createClientId } from '../../common/util/client-id'
 import { ModelCostPanel } from '../../component/model-cost/ModelCostPanel'
+import { SHOW_MODEL_COSTS } from '../../component/model-cost/visibility'
 import { BrainCircuit, ChevronRight, ChevronsLeft, ChevronsRight, Database, LoaderCircle, Search, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
@@ -316,7 +317,7 @@ export function PreDeparturePage({ active = true }: { active?: boolean }) {
           <h1>{text('出发前故障分析', '出発前故障分析')}</h1>
         </div>
         <div className="page-heading-costs">
-          <ModelCostPanel scope={costScope} active={active} />
+          {SHOW_MODEL_COSTS && <ModelCostPanel scope={costScope} active={active} />}
           <p>
           {text(
             '先把现场描述转化为问题模型，再按设备与故障类型组织企业维修知识。',

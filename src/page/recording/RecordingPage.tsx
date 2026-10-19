@@ -1,4 +1,5 @@
 import { ModelCostPanel } from '../../component/model-cost/ModelCostPanel'
+import { SHOW_MODEL_COSTS } from '../../component/model-cost/visibility'
 import { FileAudio, LoaderCircle, Mic2, Square, Pencil, Play, RotateCcw, Search, Send, Trash2, Upload, Volume2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { recordingApi } from '../../api'
@@ -353,7 +354,7 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
       <section className="page-heading">
         <div><span className="eyebrow">RECORDING ANALYSIS</span><h1>{text('音频分析', '音声分析')}</h1></div>
         <div className="page-heading-costs">
-          <ModelCostPanel scope={batch?.id} active={active} />
+          {SHOW_MODEL_COSTS && <ModelCostPanel scope={batch?.id} active={active} />}
           <p>{text('上传报修录音，核对说话人原文和设备问题后进入诊断。', '録音をアップロードし、話者別の原文と機器情報を確認して診断へ進みます。')}</p>
         </div>
       </section>
