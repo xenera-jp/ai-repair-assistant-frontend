@@ -1,4 +1,5 @@
 import { ModelCostPanel } from '../../component/model-cost/ModelCostPanel'
+import { SHOW_MODEL_COSTS } from '../../component/model-cost/visibility'
 import { modelCostScope } from '../../api/model-cost-api'
 import { ArrowRight, CheckCircle2, CircleAlert, LoaderCircle, RotateCcw, TriangleAlert, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -188,7 +189,7 @@ export function OnsitePage() {
           <h1>{text('现场分析', '現場分析')}</h1>
         </div>
         <div className="page-heading-costs">
-          <ModelCostPanel scope={modelCostScope(diagnosis?.id)} />
+          {SHOW_MODEL_COSTS && <ModelCostPanel scope={modelCostScope(diagnosis?.id)} />}
           <p>
           {text(
             '继承出发前结论，通过一次一个问题继续缩小候选范围。',
