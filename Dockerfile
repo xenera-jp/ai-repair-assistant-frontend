@@ -5,6 +5,8 @@ WORKDIR /app
 
 # Vite replaces this value while building the browser bundle. It is intentionally
 # limited to the public API URL and must never contain server-side secrets.
+ARG VITE_APP_BASE_PATH=/ai-repair/
+ENV VITE_APP_BASE_PATH=${VITE_APP_BASE_PATH}
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 

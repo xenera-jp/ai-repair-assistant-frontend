@@ -1,5 +1,5 @@
 // 允许部署环境通过 Vite 变量指定后端地址；本地开发时使用同源代理。
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
+import { resolveApiUrl } from '../common/urls'
 
 export class HttpRequestError extends Error {
   readonly status: number
@@ -12,7 +12,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!(init?.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     headers,
   })
@@ -25,4 +25,4 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** 构造非 fetch 场景（如 PDF iframe）的完整 API 地址。 */
-export function apiUrl(path: string) { return `${apiBaseUrl}${path}` }
+export function apiUrl(path: string) { return resolveApiUrl(path) }
