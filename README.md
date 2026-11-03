@@ -47,3 +47,8 @@ The implemented flow covers:
   backend.
 - The authoritative API contract is
   `ai-repair-assistant-backend/docs/api/openapi.yaml`.
+
+## Subpath deployment
+
+See [deployment handoff](deploy/ec2/SUBPATH.md) for `/ai-repair/`, build-time
+configuration, external gateway networking, and the EC2 script/Compose distinction.

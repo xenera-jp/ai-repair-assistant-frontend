@@ -1,3 +1,4 @@
+import { navigate } from '../../common/hook/useAppRoute'
 import { ModelCostPanel } from '../../component/model-cost/ModelCostPanel'
 import { SHOW_MODEL_COSTS } from '../../component/model-cost/visibility'
 import { FileAudio, LoaderCircle, Mic2, Square, Pencil, Play, RotateCcw, Search, Send, Trash2, Upload, Volume2, X } from 'lucide-react'
@@ -332,8 +333,7 @@ export function RecordingPage({ active = true }: { active?: boolean }) {
         const confirmed = await recordingApi.confirmCorrections(batch.id, suggestedCorrections.map((issue) => ({ issueId: issue.id, version: issue.version, decision: 'ACCEPT' })))
         setBatch(confirmed)
       }
-      window.history.pushState({ recordingProblemDescription: preview, recordingBatchId: batch.id }, '', '/pre-departure')
-      window.dispatchEvent(new PopStateEvent('popstate'))
+      navigate('/pre-departure', { recordingProblemDescription: preview, recordingBatchId: batch.id })
     } catch (reason) { setError(message(reason, text)) }
     finally { setIsApplying(false) }
   }
